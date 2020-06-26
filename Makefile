@@ -12,7 +12,8 @@ BUILD_DIR ?= build
 
 SRCS += \
 	src/startup_stm32l432kc.c \
-	src/main.c
+	src/main.c \
+	src/system/syscalls.c
 
 INCLUDES += \
 
