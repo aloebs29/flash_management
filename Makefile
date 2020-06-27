@@ -11,11 +11,22 @@ PROJECT := unmanaged_flash
 BUILD_DIR ?= build
 
 SRCS += \
+	src/st/ll/stm32l4xx_ll_gpio.c \
+	src/st/ll/stm32l4xx_ll_pwr.c \
+	src/st/ll/stm32l4xx_ll_rcc.c \
+	src/st/ll/stm32l4xx_ll_utils.c \
+	src/st/system_stm32l4xx.c \
+	src/modules/led.c \
+	src/modules/sys_time.c \
+	src/syscalls.c \
 	src/startup_stm32l432kc.c \
-	src/main.c \
-	src/system/syscalls.c
+	src/stm32l432kc_it.c \
+	src/main.c
 
 INCLUDES += \
+	src/st \
+	src/st/ll \
+	src/cmsis \
 
 
 CC=arm-none-eabi-gcc
@@ -24,6 +35,7 @@ OCPY=arm-none-eabi-objcopy
 ODUMP=arm-none-eabi-objdump
 SZ=arm-none-eabi-size
 MKDIR=mkdir
+STFLASH=st-flash
 
 ASMFLAGS += \
 	-mcpu=cortex-m4 \
@@ -63,8 +75,8 @@ LDFLAGS += \
 	-Wl,--print-memory-usage
 
 DEFINES += \
-	USE_HAL_DRIVER \
 	DEBUG \
+	USE_FULL_ASSERT \
 	STM32L432xx
 
 CFLAGS += $(foreach i,$(INCLUDES),-I$(i))
@@ -103,7 +115,10 @@ $(BUILD_DIR)/$(PROJECT).elf: $(OBJS)
 	@echo "Linking $@"
 	$(NO_ECHO)$(CC) $(CFLAGS) $^ $(LDFLAGS) -o $@
 
-
 .PHONY: clean
 clean:
 	rm -rf $(BUILD_DIR)
+
+.PHONY: flash
+flash: $(BUILD_DIR)/$(PROJECT).bin
+	$(STFLASH) write $(BUILD_DIR)/$(PROJECT).bin 0x08000000
