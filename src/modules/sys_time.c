@@ -17,14 +17,15 @@
 uint32_t sys_time_ms = 0;
 
 // public function definitions
-void sys_time_init(void)
+void sys_time_init(uint32_t system_core_clock_hz)
 {
     sys_time_ms = 0;
 
+    // setup 1 ms sys tick
+    SysTick_Config((system_core_clock_hz / 1000) - 1);
     NVIC_SetPriority(SysTick_IRQn, 
             NVIC_EncodePriority(NVIC_GetPriorityGrouping(), 
             SYSTICK_PREEMPT_PRIORITY, SYSTICK_SUB_PRIORITY));
-    SET_BIT(SysTick->CTRL, SysTick_CTRL_TICKINT_Msk);
 }
 
 void _sys_time_increment(void)
@@ -37,6 +38,12 @@ uint32_t sys_time_get_ms(void)
     return sys_time_ms;
 }
 
+// TODO: add unit test for this function
+//  normal case
+//  current time overlapped, end time not overlapped
+//  current time overlapped, end time overlapped
+//  current time not overlapped, end time overlapped
+//  all above cases when duration is 0
 bool sys_time_is_elapsed(uint32_t start, uint32_t duration_ms)
 {
     uint32_t current = sys_time_ms; // snapshot the current time

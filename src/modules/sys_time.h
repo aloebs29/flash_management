@@ -15,7 +15,7 @@
 #include <stdbool.h>
 
 /// @brief Resets the system time and enables sys tick interrupt
-void sys_time_init(void);
+void sys_time_init(uint32_t system_core_clock_hz);
 
 /// @brief Increments the system time counter -- should only be called by interrupt!
 void _sys_time_increment(void);

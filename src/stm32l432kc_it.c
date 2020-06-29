@@ -14,6 +14,7 @@
 // fault exception handlers
 void NMI_Handler(void)
 {
+    // TODO: write production-worthy exception handlers
     led_set_output(true); // to make it obvious that an exception occurred
     while (1);
 }
