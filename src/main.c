@@ -15,6 +15,7 @@
 #include "st/ll/stm32l4xx_ll_utils.h"
 
 #include "modules/led.h"
+#include "modules/shell.h"
 #include "modules/sys_time.h"
 #include "modules/uart.h"
 
@@ -34,6 +35,7 @@ int main(void)
     led_init();
     sys_time_init();
     uart_init();
+    shell_init();
 
     // blink LED to let user know we're on
     led_set_output(true);
@@ -44,6 +46,7 @@ int main(void)
     for (;;)
     {
         // tick functions
+        shell_tick();
     }
 }
 

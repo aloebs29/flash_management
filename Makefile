@@ -17,6 +17,7 @@ SRCS += \
 	src/st/ll/stm32l4xx_ll_utils.c \
 	src/st/system_stm32l4xx.c \
 	src/modules/led.c \
+	src/modules/shell.c \
 	src/modules/sys_time.c \
 	src/modules/uart.c \
 	src/syscalls.c \
