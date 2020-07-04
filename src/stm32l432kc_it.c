@@ -10,6 +10,7 @@
 
 #include "modules/led.h" // to set LED for exception handlers
 #include "modules/sys_time.h" // for incrementing sys time every sys tick interrupt
+#include "modules/uart.h"
 
 // fault exception handlers
 void NMI_Handler(void)
@@ -50,3 +51,7 @@ void SysTick_Handler(void)
 }
 
 // peripheral interrupt handlers
+void USART2_IRQHandler(void)
+{
+    _uart_isr();
+}

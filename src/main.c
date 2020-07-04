@@ -16,22 +16,24 @@
 
 #include "modules/led.h"
 #include "modules/sys_time.h"
+#include "modules/uart.h"
 
+// defines
 #define STARTUP_LED_DURATION_MS         100
-#define SYSTEM_CORE_CLOCK               80000000UL // Hz
 
 // private function prototypes
-static void clock_config(uint32_t system_core_clock_hz);
+static void clock_config(void);
 
 // application main function
 int main(void)
 {
     // setup clock
-    clock_config(SYSTEM_CORE_CLOCK);
+    clock_config();
 
     // init modules
     led_init();
-    sys_time_init(SYSTEM_CORE_CLOCK);
+    sys_time_init();
+    uart_init();
 
     // blink LED to let user know we're on
     led_set_output(true);
@@ -46,12 +48,8 @@ int main(void)
 }
 
 // private function definitions
-static void clock_config(uint32_t system_core_clock_hz)
+static void clock_config(void)
 {
-    // for now this is only to catch future screw-ups
-    if (80000000UL != system_core_clock_hz)
-        assert_failed(__FILE__, __LINE__);
-
     // enable prefetch & set latency -- icache and dcache are enabled by default
     LL_FLASH_EnablePrefetch(); // according to the ref manual, this negates perf impact due to flash latency
     LL_FLASH_SetLatency(LL_FLASH_LATENCY_4);
@@ -74,6 +72,9 @@ static void clock_config(uint32_t system_core_clock_hz)
     LL_RCC_SetAPB1Prescaler(LL_RCC_APB1_DIV_1);
     LL_RCC_SetAPB2Prescaler(LL_RCC_APB2_DIV_1);
 
+    // configure peripheral clock sources
+    LL_RCC_SetUSARTClockSource(LL_RCC_USART2_CLKSOURCE_PCLK1);
+
     // update CMSIS variable
-    LL_SetSystemCoreClock(system_core_clock_hz);
+    LL_SetSystemCoreClock(80000000UL);
 }

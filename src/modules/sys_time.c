@@ -8,8 +8,10 @@
 #include "sys_time.h"
 
 #include "../st/stm32l4xx.h"
+#include "../st/system_stm32l4xx.h"
 #include "../st/ll/stm32l4xx_ll_utils.h"
 
+// defines
 #define SYSTICK_PREEMPT_PRIORITY        0
 #define SYSTICK_SUB_PRIORITY            0
 
@@ -17,12 +19,12 @@
 uint32_t sys_time_ms = 0;
 
 // public function definitions
-void sys_time_init(uint32_t system_core_clock_hz)
+void sys_time_init(void)
 {
     sys_time_ms = 0;
 
     // setup 1 ms sys tick
-    SysTick_Config((system_core_clock_hz / 1000) - 1);
+    SysTick_Config((SystemCoreClock / 1000) - 1);
     NVIC_SetPriority(SysTick_IRQn, 
             NVIC_EncodePriority(NVIC_GetPriorityGrouping(), 
             SYSTICK_PREEMPT_PRIORITY, SYSTICK_SUB_PRIORITY));
