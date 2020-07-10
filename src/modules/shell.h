@@ -16,4 +16,10 @@ void shell_init(void);
 /// @brief Gives processing time to the shell
 void shell_tick(void);
 
+/// @brief Writes a string + newline to the shell
+void shell_print_line(const char * string);
+
+/// @brief Writes formatted output + newline to the shell
+void shell_printf_line(const char * format, ...);
+
 #endif // __SHELL_H

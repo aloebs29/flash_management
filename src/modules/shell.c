@@ -9,14 +9,23 @@
 
 #include <stdio.h>
 #include <stdbool.h>
+#include <stdarg.h>
+
+#include "shell_command.h"
 
 // defines
-#define RECEIVE_BUFFER_LEN          128 // max command + args length supported
+#define RECEIVE_BUFFER_LEN      128 // max command + args length supported
 
 // private function prototypes
 static void receive_buffer_reset(void);
-static bool try_get_char(char * out);
+static bool receive_buffer_is_full(void);
+static size_t receive_buffer_len(void);
+static void receive_buffer_push(char c);
+
+static bool try_get_char(char *out);
 static void echo(char c);
+static void put_newline(void);
+static void put_prompt(void);
 
 // private variables
 static char receive_buffer[RECEIVE_BUFFER_LEN];
@@ -26,6 +35,9 @@ static size_t receive_index;
 void shell_init(void)
 {
     receive_buffer_reset();
+    // start with fresh newline and prompt
+    put_newline();
+    put_prompt();
 }
 
 void shell_tick(void)
@@ -33,10 +45,50 @@ void shell_tick(void)
     char c;
     if (try_get_char(&c))
     {
-        // for now, just echo
-        echo(c);
-        // TODO: build CLI with receive buffer
+        // ignore newline -- we only expect carriage return from the client
+        if (c != '\n')
+        {
+            echo(c);
+            receive_buffer_push(c);
+            // if carriage return, process command
+            if ('\r' == c)
+            {
+                shell_command_process(receive_buffer, receive_buffer_len());
+                put_newline(); // more readable with the extra newline
+                put_prompt();
+                receive_buffer_reset();
+            }
+            // else, check for rx full
+            else if (receive_buffer_is_full())
+            {
+                shell_printf_line("Receive buffer full (limit %d). Resetting receive buffer.",
+                                  RECEIVE_BUFFER_LEN);
+                receive_buffer_reset();
+            }
+        }
     }
+}
+
+void shell_print_line(const char *string)
+{
+    // this gives us control over the newline behavior (over puts())
+    while (*string)
+    {
+        putchar(*string);
+        string++;
+    }
+    put_newline();
+}
+
+void shell_printf_line(const char *format, ...)
+{
+    // handle the printf
+    va_list args;
+    va_start(args, format);
+    vprintf(format, args);
+    va_end(args);
+    // newline
+    put_newline();
 }
 
 // private function definitions
@@ -46,14 +98,30 @@ static void receive_buffer_reset(void)
     receive_index = 0;
 }
 
-static bool try_get_char(char * out)
+static bool receive_buffer_is_full(void)
+{
+    return receive_index >= (RECEIVE_BUFFER_LEN - 1);
+}
+
+static size_t receive_buffer_len(void)
+{
+    return receive_index;
+}
+
+static void receive_buffer_push(char c)
+{
+    receive_buffer[receive_index] = c;
+    receive_index++;
+}
+
+static bool try_get_char(char *out)
 {
     // To get around getchar() blocking, the _read() syscall returns
     // EOF for stdin whenever the UART rx is empty. Because of this,
     // we must check getchar() for EOF so that we know if we have a new
     // character, and rewind stdin when we do not.
     char c = getchar();
-    if ((char)EOF == c) 
+    if ((char)EOF == c)
     {
         rewind(stdin);
         return false;
@@ -68,13 +136,12 @@ static bool try_get_char(char * out)
 static void echo(char c)
 {
     // handle newline
-    if ('\r' == c) 
+    if ('\r' == c)
     {
-        putchar('\r');
-        putchar('\n');
+        put_newline();
     }
     // handle backspace
-    else if ('\b' == c) 
+    else if ('\b' == c)
     {
         putchar('\b');
         putchar(' ');
@@ -85,4 +152,18 @@ static void echo(char c)
     {
         putchar(c);
     }
+}
+
+static void put_newline(void)
+{
+    // this keeps our newline in a single function in case we decide to use a different
+    // line ending in the future
+    putchar('\r');
+    putchar('\n');
+}
+
+static void put_prompt(void)
+{
+    putchar('>');
+    putchar(' ');
 }

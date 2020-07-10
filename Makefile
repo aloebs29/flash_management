@@ -18,6 +18,7 @@ SRCS += \
 	src/st/system_stm32l4xx.c \
 	src/modules/led.c \
 	src/modules/shell.c \
+	src/modules/shell_command.c \
 	src/modules/sys_time.c \
 	src/modules/uart.c \
 	src/syscalls.c \
@@ -52,7 +53,7 @@ CFLAGS += \
 	-mcpu=cortex-m4 \
 	-std=gnu11 \
 	-g3 \
-	-O0 \
+	-Og \
 	-ffunction-sections \
 	-fdata-sections \
 	-Wall \

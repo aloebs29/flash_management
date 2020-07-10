@@ -117,7 +117,7 @@ void _uart_isr(void)
         LL_USART_ClearFlag_ORE(VCP_UART);
     }
     // if there is an rxn flag, read byte
-    if (LL_USART_IsActiveFlag_RXNE)
+    if (LL_USART_IsActiveFlag_RXNE(VCP_UART))
     {
         // TODO: grab the return value from this and log a "uart fifo full"
         // status somewhere if false
