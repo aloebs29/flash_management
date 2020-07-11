@@ -1,4 +1,4 @@
-# unmanaged_flash
+# flash_management
 (WIP) Implementation of a file system, flash translation layer, and SPI NAND driver. Uses an ST NUCLEO-L432KC (STM32L432KCUX MCU) board connected to a Micron MT29F1G01ABAFDWB SPI NAND SLC flash chip.
 
 ## credits

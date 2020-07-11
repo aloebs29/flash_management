@@ -7,7 +7,7 @@ else
 	NO_ECHO := @
 endif
 
-PROJECT := unmanaged_flash
+PROJECT := flash_management
 BUILD_DIR ?= build
 
 SRCS += \
