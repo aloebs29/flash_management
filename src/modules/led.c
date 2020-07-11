@@ -13,7 +13,8 @@
 void led_init(void)
 {
     // enable peripheral clock
-    LL_AHB2_GRP1_EnableClock(LL_AHB2_GRP1_PERIPH_GPIOB);
+    if (!LL_AHB2_GRP1_IsEnabledClock(LL_AHB2_GRP1_PERIPH_GPIOB))
+        LL_AHB2_GRP1_EnableClock(LL_AHB2_GRP1_PERIPH_GPIOB);
 
     // setup pin as output -- default to low (LED off)
     led_set_output(false);

@@ -14,11 +14,13 @@ SRCS += \
 	src/st/ll/stm32l4xx_ll_gpio.c \
 	src/st/ll/stm32l4xx_ll_pwr.c \
 	src/st/ll/stm32l4xx_ll_rcc.c \
+	src/st/ll/stm32l4xx_ll_spi.c \
 	src/st/ll/stm32l4xx_ll_utils.c \
 	src/st/system_stm32l4xx.c \
 	src/modules/led.c \
 	src/modules/shell.c \
 	src/modules/shell_command.c \
+	src/modules/spi.c \
 	src/modules/sys_time.c \
 	src/modules/uart.c \
 	src/syscalls.c \

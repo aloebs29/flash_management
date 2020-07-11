@@ -9,13 +9,13 @@
 
 #include "st/stm32_assert.h"
 #include "st/ll/stm32l4xx_ll_bus.h"
-#include "st/ll/stm32l4xx_ll_gpio.h"
 #include "st/ll/stm32l4xx_ll_rcc.h"
 #include "st/ll/stm32l4xx_ll_system.h"
 #include "st/ll/stm32l4xx_ll_utils.h"
 
 #include "modules/led.h"
 #include "modules/shell.h"
+#include "modules/spi.h"
 #include "modules/sys_time.h"
 #include "modules/uart.h"
 
@@ -36,6 +36,7 @@ int main(void)
     sys_time_init();
     uart_init();
     shell_init();
+    spi_init();
 
     // blink LED to let user know we're on
     led_set_output(true);

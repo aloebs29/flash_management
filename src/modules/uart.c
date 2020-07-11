@@ -47,7 +47,8 @@ void uart_init(void)
 {
     // enable peripheral clocks
     LL_APB1_GRP1_EnableClock(LL_APB1_GRP1_PERIPH_USART2);
-    LL_AHB2_GRP1_EnableClock(LL_AHB2_GRP1_PERIPH_GPIOA);
+    if (!LL_AHB2_GRP1_IsEnabledClock(LL_AHB2_GRP1_PERIPH_GPIOA))
+        LL_AHB2_GRP1_EnableClock(LL_AHB2_GRP1_PERIPH_GPIOA);
 
     // setup pins
     LL_GPIO_SetPinMode(VCP_TX_PORT, VCP_TX_PIN, LL_GPIO_MODE_ALTERNATE);
