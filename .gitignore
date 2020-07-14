@@ -52,4 +52,8 @@ Mkfile.old
 dkms.conf
 
 # build directory
+.vscode/
 build/
+datasheets/
+examples/
+

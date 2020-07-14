@@ -2,17 +2,17 @@
  * @file		sys_time.h
  * @author		Andrew Loebs
  * @brief		Header file of the sys time module
- * 
+ *
  * Exposes a millisecond time to the system (driven by systick) and provides
  * functions for comparing times (with wrap-around) and blocking delays.
- * 	
+ *
  */
 
 #ifndef __SYS_TIME_H
 #define __SYS_TIME_H
 
-#include <stdint.h>
 #include <stdbool.h>
+#include <stdint.h>
 
 /// @brief Resets the system time and enables sys tick interrupt
 void sys_time_init(void);

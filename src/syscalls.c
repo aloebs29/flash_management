@@ -1,10 +1,10 @@
+#include <errno.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
-#include <errno.h>
-#include <unistd.h>
-#include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
 
 #include "modules/uart.h"
 
@@ -15,8 +15,7 @@ void *_sbrk(int incr)
     static char *heap_end;
     char *prev_heap_end;
 
-    if (!heap_end)
-        heap_end = (char *)&end;
+    if (!heap_end) heap_end = (char *)&end;
 
     prev_heap_end = heap_end;
     heap_end += incr;
@@ -24,15 +23,9 @@ void *_sbrk(int incr)
     return prev_heap_end;
 }
 
-int _open(char *path, int flags, ...)
-{
-    return -1;
-}
+int _open(char *path, int flags, ...) { return -1; }
 
-int _close(int file)
-{
-    return -1;
-}
+int _close(int file) { return -1; }
 
 int _fstat(int file, struct stat *st)
 {
@@ -40,51 +33,34 @@ int _fstat(int file, struct stat *st)
     return 0;
 }
 
-int _isatty(int file)
-{
-    return 1;
-}
+int _isatty(int file) { return 1; }
 
-int _lseek(int file, int ptr, int dir)
-{
-    return 0;
-}
+int _lseek(int file, int ptr, int dir) { return 0; }
 
-void _kill(int pid, int sig)
-{
-    return;
-}
+void _kill(int pid, int sig) { return; }
 
 void _exit(int status)
 {
     _kill(status, -1);
-    while (1)
-    {
+    while (1) {
     }
 }
 
-int _getpid(void)
-{
-    return -1;
-}
+int _getpid(void) { return -1; }
 
 int _read(int file, char *ptr, int len)
 {
-    if (STDIN_FILENO == file)
-    {
+    if (STDIN_FILENO == file) {
         int i; // this needs to persist after the for loop
-        for (i = 0; i < len; i++)
-        {
+        for (i = 0; i < len; i++) {
             // this will return true if a character is available
-            if (!_uart_try_getc(&ptr[i]))
-            {
+            if (!_uart_try_getc(&ptr[i])) {
                 break; // this will end up returning partial buffer
             }
         }
         return i;
     }
-    else
-    {
+    else {
         // anything other than STDIN is invalid
         errno = EBADF;
         return -1;
@@ -93,17 +69,14 @@ int _read(int file, char *ptr, int len)
 
 int _write(int file, char *ptr, int len)
 {
-    if ((STDOUT_FILENO == file) || (STDERR_FILENO == file))
-    {
+    if ((STDOUT_FILENO == file) || (STDERR_FILENO == file)) {
         // print all of the characters
-        for (int i = 0; i < len; i++)
-        {
+        for (int i = 0; i < len; i++) {
             _uart_putc(ptr[i]);
         }
         return len;
     }
-    else 
-    {
+    else {
         // anything other than STDOUT or STDERR is invalid
         errno = EBADF;
         return -1;

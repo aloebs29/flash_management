@@ -2,7 +2,7 @@
  * @file		led.c
  * @author		Andrew Loebs
  * @brief		Implementation file of the LED module
- * 
+ *
  */
 
 #include "led.h"

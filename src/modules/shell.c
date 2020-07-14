@@ -2,19 +2,19 @@
  * @file		shell.c
  * @author		Andrew Loebs
  * @brief		Implementation file of the shell module
- * 	
+ *
  */
 
 #include "shell.h"
 
-#include <stdio.h>
-#include <stdbool.h>
 #include <stdarg.h>
+#include <stdbool.h>
+#include <stdio.h>
 
-#include "shell_command.h"
+#include "shell_cmd.h"
 
 // defines
-#define RECEIVE_BUFFER_LEN      128 // max command + args length supported
+#define RECEIVE_BUFFER_LEN 128 // max command + args length supported
 
 // private function prototypes
 static void receive_buffer_reset(void);
@@ -43,24 +43,20 @@ void shell_init(void)
 void shell_tick(void)
 {
     char c;
-    if (try_get_char(&c))
-    {
+    if (try_get_char(&c)) {
         // ignore newline -- we only expect carriage return from the client
-        if (c != '\n')
-        {
+        if (c != '\n') {
             echo(c);
             receive_buffer_push(c);
             // if carriage return, process command
-            if ('\r' == c)
-            {
-                shell_command_process(receive_buffer, receive_buffer_len());
+            if ('\r' == c) {
+                shell_cmd_process(receive_buffer, receive_buffer_len());
                 put_newline(); // more readable with the extra newline
                 put_prompt();
                 receive_buffer_reset();
             }
             // else, check for rx full
-            else if (receive_buffer_is_full())
-            {
+            else if (receive_buffer_is_full()) {
                 shell_printf_line("Receive buffer full (limit %d). Resetting receive buffer.",
                                   RECEIVE_BUFFER_LEN);
                 receive_buffer_reset();
@@ -72,8 +68,7 @@ void shell_tick(void)
 void shell_print_line(const char *string)
 {
     // this gives us control over the newline behavior (over puts())
-    while (*string)
-    {
+    while (*string) {
         putchar(*string);
         string++;
     }
@@ -98,15 +93,9 @@ static void receive_buffer_reset(void)
     receive_index = 0;
 }
 
-static bool receive_buffer_is_full(void)
-{
-    return receive_index >= (RECEIVE_BUFFER_LEN - 1);
-}
+static bool receive_buffer_is_full(void) { return receive_index >= (RECEIVE_BUFFER_LEN - 1); }
 
-static size_t receive_buffer_len(void)
-{
-    return receive_index;
-}
+static size_t receive_buffer_len(void) { return receive_index; }
 
 static void receive_buffer_push(char c)
 {
@@ -121,13 +110,11 @@ static bool try_get_char(char *out)
     // we must check getchar() for EOF so that we know if we have a new
     // character, and rewind stdin when we do not.
     char c = getchar();
-    if ((char)EOF == c)
-    {
+    if ((char)EOF == c) {
         rewind(stdin);
         return false;
     }
-    else
-    {
+    else {
         *out = c;
         return true;
     }
@@ -136,20 +123,17 @@ static bool try_get_char(char *out)
 static void echo(char c)
 {
     // handle newline
-    if ('\r' == c)
-    {
+    if ('\r' == c) {
         put_newline();
     }
     // handle backspace
-    else if ('\b' == c)
-    {
+    else if ('\b' == c) {
         putchar('\b');
         putchar(' ');
         putchar('\b');
     }
     // else, just echo
-    else
-    {
+    else {
         putchar(c);
     }
 }

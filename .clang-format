@@ -1,0 +1,7 @@
+UseTab: Never
+IndentWidth: 4
+BreakBeforeBraces: Stroustrup
+AllowShortIfStatementsOnASingleLine: true
+AlignConsecutiveMacros: true
+IndentCaseLabels: true
+ColumnLimit: 100

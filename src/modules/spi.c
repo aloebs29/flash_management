@@ -2,7 +2,7 @@
  * @file		spi.c
  * @author		Andrew Loebs
  * @brief		Implementation file of the spi module
- * 	
+ *
  */
 
 #include "spi.h"
@@ -14,19 +14,19 @@
 #include "sys_time.h"
 
 // defines
-#define SPI_INSTANCE            SPI1
+#define SPI_INSTANCE SPI1
 
-#define MOSI_PORT               GPIOA
-#define MOSI_PIN                LL_GPIO_PIN_7
-#define MOSI_AF                 LL_GPIO_AF_5
+#define MOSI_PORT GPIOA
+#define MOSI_PIN  LL_GPIO_PIN_7
+#define MOSI_AF   LL_GPIO_AF_5
 
-#define MISO_PORT               GPIOA
-#define MISO_PIN                LL_GPIO_PIN_6
-#define MISO_AF                 LL_GPIO_AF_5
+#define MISO_PORT GPIOA
+#define MISO_PIN  LL_GPIO_PIN_6
+#define MISO_AF   LL_GPIO_AF_5
 
-#define SCK_PORT                GPIOA
-#define SCK_PIN                 LL_GPIO_PIN_1
-#define SCK_AF                  LL_GPIO_AF_5
+#define SCK_PORT GPIOA
+#define SCK_PIN  LL_GPIO_PIN_1
+#define SCK_AF   LL_GPIO_AF_5
 
 // public function definitions
 void spi_init(void)
@@ -66,46 +66,42 @@ void spi_init(void)
     LL_SPI_Enable(SPI_INSTANCE);
 }
 
-int spi_write(uint8_t * write_buff, size_t write_len, uint32_t timeout_ms)
+int spi_write(uint8_t *write_buff, size_t write_len, uint32_t timeout_ms)
 {
     // validate input
-    if (!write_buff)
-        return SPI_RET_NULL_PTR;
+    if (!write_buff) return SPI_RET_NULL_PTR;
 
     // perform transfer
     uint32_t start_time = sys_time_get_ms();
-    for (int i = 0; i < write_len; i++)
-    {
+    for (int i = 0; i < write_len; i++) {
         LL_SPI_TransmitData8(SPI_INSTANCE, write_buff[i]);
         // block until tx empty or timeout
-        while (!LL_SPI_IsActiveFlag_TXE(SPI_INSTANCE) && 
-                !sys_time_is_elapsed(start_time, timeout_ms));
+        while (!LL_SPI_IsActiveFlag_TXE(SPI_INSTANCE) &&
+               !sys_time_is_elapsed(start_time, timeout_ms))
+            ;
         // catch timeout condition
-        if (sys_time_is_elapsed(start_time, timeout_ms))
-            return SPI_RET_TIMEOUT;
+        if (sys_time_is_elapsed(start_time, timeout_ms)) return SPI_RET_TIMEOUT;
     }
 
     return SPI_RET_OK;
 }
 
-int spi_read(uint8_t * read_buff, size_t read_len, uint32_t timeout_ms)
+int spi_read(uint8_t *read_buff, size_t read_len, uint32_t timeout_ms)
 {
     // validate input
-    if (!read_buff)
-        return SPI_RET_NULL_PTR;
+    if (!read_buff) return SPI_RET_NULL_PTR;
 
     // perform transfer
     uint32_t start_time = sys_time_get_ms();
-    for (int i = 0; i < read_len; i++)
-    {
+    for (int i = 0; i < read_len; i++) {
         LL_SPI_TransmitData8(SPI_INSTANCE, 0);
         // block until tx empty and rx not empty or timeout
-        while ((!LL_SPI_IsActiveFlag_TXE(SPI_INSTANCE) ||
-                !LL_SPI_IsActiveFlag_RXNE(SPI_INSTANCE)) && 
-                !sys_time_is_elapsed(start_time, timeout_ms));
+        while (
+            (!LL_SPI_IsActiveFlag_TXE(SPI_INSTANCE) || !LL_SPI_IsActiveFlag_RXNE(SPI_INSTANCE)) &&
+            !sys_time_is_elapsed(start_time, timeout_ms))
+            ;
         // catch timeout condition
-        if (sys_time_is_elapsed(start_time, timeout_ms))
-            return SPI_RET_TIMEOUT;
+        if (sys_time_is_elapsed(start_time, timeout_ms)) return SPI_RET_TIMEOUT;
         // otherwise, store byte
         else
             read_buff[i] = LL_SPI_ReceiveData8(SPI_INSTANCE);
@@ -114,25 +110,23 @@ int spi_read(uint8_t * read_buff, size_t read_len, uint32_t timeout_ms)
     return SPI_RET_OK;
 }
 
-int spi_write_read(uint8_t * write_buff, uint8_t * read_buff, size_t transfer_len, 
-        uint32_t timeout_ms)
+int spi_write_read(uint8_t *write_buff, uint8_t *read_buff, size_t transfer_len,
+                   uint32_t timeout_ms)
 {
     // validate input
-    if (!read_buff)
-        return SPI_RET_NULL_PTR;
+    if (!read_buff) return SPI_RET_NULL_PTR;
 
     // perform transfer
     uint32_t start_time = sys_time_get_ms();
-    for (int i = 0; i < transfer_len; i++)
-    {
+    for (int i = 0; i < transfer_len; i++) {
         LL_SPI_TransmitData8(SPI_INSTANCE, write_buff[i]);
         // block until tx empty and rx not empty or timeout
-        while ((!LL_SPI_IsActiveFlag_TXE(SPI_INSTANCE) ||
-                !LL_SPI_IsActiveFlag_RXNE(SPI_INSTANCE)) && 
-                !sys_time_is_elapsed(start_time, timeout_ms));
+        while (
+            (!LL_SPI_IsActiveFlag_TXE(SPI_INSTANCE) || !LL_SPI_IsActiveFlag_RXNE(SPI_INSTANCE)) &&
+            !sys_time_is_elapsed(start_time, timeout_ms))
+            ;
         // catch timeout condition
-        if (sys_time_is_elapsed(start_time, timeout_ms))
-            return SPI_RET_TIMEOUT;
+        if (sys_time_is_elapsed(start_time, timeout_ms)) return SPI_RET_TIMEOUT;
         // otherwise, store byte
         else
             read_buff[i] = LL_SPI_ReceiveData8(SPI_INSTANCE);

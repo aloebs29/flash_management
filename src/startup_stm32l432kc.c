@@ -2,14 +2,14 @@
  * @file		startup_stm23l432kc.c
  * @author		Andrew Loebs
  * @brief		Startup file for the application
- * 
+ *
  * Defines the vector table, initializes static variables, zeros bss,
  * calls stdlib init, and the main() function.
- * 
+ *
  * Heavily influenced by Miro Samek's startup file used in lesson 19
  * of his "Modern Embedded Systems Programming Course".
  * @see https://www.state-machine.com/quickstart/
- * 				
+ *
  */
 
 #include <stdint.h>
@@ -220,14 +220,12 @@ void Reset_Handler(void)
     unsigned *dst;
     // copy the data segment initializers from flash to RAM
     src = &__data_load;
-    for (dst = &__data_start; dst < &__data_end__; ++dst, ++src)
-    {
+    for (dst = &__data_start; dst < &__data_end__; ++dst, ++src) {
         *dst = *src;
     }
 
     // zero fill the .bss segment in RAM
-    for (dst = &__bss_start__; dst < &__bss_end__; ++dst)
-    {
+    for (dst = &__bss_start__; dst < &__bss_end__; ++dst) {
         *dst = 0;
     }
 
@@ -243,8 +241,7 @@ void Reset_Handler(void)
 void assert_failed(char *file, uint32_t line)
 {
     // TODO: print file & line
-    while (1)
-    {
+    while (1) {
     }
 }
 
@@ -252,60 +249,54 @@ void assert_failed(char *file, uint32_t line)
 __attribute__((naked)) void NMI_Handler(void);
 void NMI_Handler(void)
 {
-    __asm volatile(
-        "    ldr r0,=str_nmi\n\t"
-        "    mov r1,#1\n\t"
-        "    b assert_failed\n\t"
-        "str_nmi: .asciz \"NMI\"\n\t"
-        "  .align 2\n\t");
+    __asm volatile("    ldr r0,=str_nmi\n\t"
+                   "    mov r1,#1\n\t"
+                   "    b assert_failed\n\t"
+                   "str_nmi: .asciz \"NMI\"\n\t"
+                   "  .align 2\n\t");
 }
 __attribute__((naked)) void MemManage_Handler(void);
 void MemManage_Handler(void)
 {
-    __asm volatile(
-        "    ldr r0,=str_mem\n\t"
-        "    mov r1,#1\n\t"
-        "    b assert_failed\n\t"
-        "str_mem: .asciz \"MemManage\"\n\t"
-        "  .align 2\n\t");
+    __asm volatile("    ldr r0,=str_mem\n\t"
+                   "    mov r1,#1\n\t"
+                   "    b assert_failed\n\t"
+                   "str_mem: .asciz \"MemManage\"\n\t"
+                   "  .align 2\n\t");
 }
 __attribute__((naked)) void HardFault_Handler(void);
 void HardFault_Handler(void)
 {
-    __asm volatile(
-        "    ldr r0,=str_hrd\n\t"
-        "    mov r1,#1\n\t"
-        "    b assert_failed\n\t"
-        "str_hrd: .asciz \"HardFault\"\n\t"
-        "  .align 2\n\t");
+    __asm volatile("    ldr r0,=str_hrd\n\t"
+                   "    mov r1,#1\n\t"
+                   "    b assert_failed\n\t"
+                   "str_hrd: .asciz \"HardFault\"\n\t"
+                   "  .align 2\n\t");
 }
 __attribute__((naked)) void BusFault_Handler(void);
 void BusFault_Handler(void)
 {
-    __asm volatile(
-        "    ldr r0,=str_bus\n\t"
-        "    mov r1,#1\n\t"
-        "    b assert_failed\n\t"
-        "str_bus: .asciz \"BusFault\"\n\t"
-        "  .align 2\n\t");
+    __asm volatile("    ldr r0,=str_bus\n\t"
+                   "    mov r1,#1\n\t"
+                   "    b assert_failed\n\t"
+                   "str_bus: .asciz \"BusFault\"\n\t"
+                   "  .align 2\n\t");
 }
 __attribute__((naked)) void UsageFault_Handler(void);
 void UsageFault_Handler(void)
 {
-    __asm volatile(
-        "    ldr r0,=str_usage\n\t"
-        "    mov r1,#1\n\t"
-        "    b assert_failed\n\t"
-        "str_usage: .asciz \"UsageFault\"\n\t"
-        "  .align 2\n\t");
+    __asm volatile("    ldr r0,=str_usage\n\t"
+                   "    mov r1,#1\n\t"
+                   "    b assert_failed\n\t"
+                   "str_usage: .asciz \"UsageFault\"\n\t"
+                   "  .align 2\n\t");
 }
 __attribute__((naked)) void Default_Handler(void);
 void Default_Handler(void)
 {
-    __asm volatile(
-        "    ldr r0,=str_dflt\n\t"
-        "    mov r1,#1\n\t"
-        "    b assert_failed\n\t"
-        "str_dflt: .asciz \"Default\"\n\t"
-        "  .align 2\n\t");
+    __asm volatile("    ldr r0,=str_dflt\n\t"
+                   "    mov r1,#1\n\t"
+                   "    b assert_failed\n\t"
+                   "str_dflt: .asciz \"Default\"\n\t"
+                   "  .align 2\n\t");
 }

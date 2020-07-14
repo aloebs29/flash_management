@@ -2,7 +2,7 @@
  * @file		uart.c
  * @author		Andrew Loebs
  * @brief		Implementation file of the UART module
- * 
+ *
  */
 
 #include "uart.h"
@@ -10,30 +10,30 @@
 #include <stdint.h>
 #include <stdlib.h>
 
-#include "../st/stm32l4xx.h"
 #include "../st/ll/stm32l4xx_ll_bus.h"
 #include "../st/ll/stm32l4xx_ll_gpio.h"
 #include "../st/ll/stm32l4xx_ll_rcc.h"
 #include "../st/ll/stm32l4xx_ll_usart.h"
+#include "../st/stm32l4xx.h"
 
 #include "fifo.h"
 #include "sys_time.h"
 
 // defines
-#define VCP_TX_PORT             GPIOA
-#define VCP_TX_PIN              LL_GPIO_PIN_2
-#define VCP_RX_PORT             GPIOA
-#define VCP_RX_PIN              LL_GPIO_PIN_15
+#define VCP_TX_PORT GPIOA
+#define VCP_TX_PIN  LL_GPIO_PIN_2
+#define VCP_RX_PORT GPIOA
+#define VCP_RX_PIN  LL_GPIO_PIN_15
 
-#define VCP_UART                USART2
+#define VCP_UART USART2
 
-#define BAUD_RATE               115200
-#define PUTC_TIMEOUT            10 // ms
+#define BAUD_RATE    115200
+#define PUTC_TIMEOUT 10 // ms
 
-#define UART_PREEMPT_PRIORITY   7 // low
-#define UART_SUB_PRIORITY       0
+#define UART_PREEMPT_PRIORITY 7 // low
+#define UART_SUB_PRIORITY     0
 
-#define RX_BUFF_LEN             256
+#define RX_BUFF_LEN 256
 
 // private function prototypes
 static uint32_t get_pclk1_hz(void);
@@ -87,9 +87,8 @@ void uart_init(void)
 
     // enable UART interrupt for rx
     LL_USART_EnableIT_RXNE(VCP_UART);
-    NVIC_SetPriority(USART2_IRQn, 
-            NVIC_EncodePriority(NVIC_GetPriorityGrouping(), 
-            UART_PREEMPT_PRIORITY, UART_SUB_PRIORITY));
+    NVIC_SetPriority(USART2_IRQn, NVIC_EncodePriority(NVIC_GetPriorityGrouping(),
+                                                      UART_PREEMPT_PRIORITY, UART_SUB_PRIORITY));
     NVIC_EnableIRQ(USART2_IRQn);
 
     // enable UART
@@ -101,25 +100,21 @@ void _uart_putc(char c)
     // Blocking single-byte transmit with timeout
     uint32_t start = sys_time_get_ms();
     LL_USART_TransmitData8(VCP_UART, c);
-     // wait for completion
-    while(!LL_USART_IsActiveFlag_TC(VCP_UART) && !sys_time_is_elapsed(start, PUTC_TIMEOUT));
+    // wait for completion
+    while (!LL_USART_IsActiveFlag_TC(VCP_UART) && !sys_time_is_elapsed(start, PUTC_TIMEOUT))
+        ;
 }
 
-bool _uart_try_getc(char * c)
-{
-    return fifo_try_dequeue(&rx_fifo, c);
-}
+bool _uart_try_getc(char *c) { return fifo_try_dequeue(&rx_fifo, c); }
 
 void _uart_isr(void)
 {
     // if there is an overrun flag, clear it
-    if (LL_USART_IsActiveFlag_ORE(VCP_UART)) 
-    {
+    if (LL_USART_IsActiveFlag_ORE(VCP_UART)) {
         LL_USART_ClearFlag_ORE(VCP_UART);
     }
     // if there is an rxn flag, read byte
-    if (LL_USART_IsActiveFlag_RXNE(VCP_UART))
-    {
+    if (LL_USART_IsActiveFlag_RXNE(VCP_UART)) {
         // TODO: grab the return value from this and log a "uart fifo full"
         // status somewhere if false
         fifo_enqueue(&rx_fifo, LL_USART_ReceiveData8(VCP_UART));
@@ -130,8 +125,7 @@ void _uart_isr(void)
 static uint32_t get_pclk1_hz(void)
 {
     uint32_t pclk1 = SystemCoreClock;
-    switch (LL_RCC_GetAPB1Prescaler())
-    {
+    switch (LL_RCC_GetAPB1Prescaler()) {
         case LL_RCC_APB1_DIV_1:
             // do nothing
             break;

@@ -19,7 +19,7 @@ SRCS += \
 	src/st/system_stm32l4xx.c \
 	src/modules/led.c \
 	src/modules/shell.c \
-	src/modules/shell_command.c \
+	src/modules/shell_cmd.c \
 	src/modules/spi.c \
 	src/modules/sys_time.c \
 	src/modules/uart.c \

@@ -1,17 +1,17 @@
 /**
  * @file		main.c
  * @author		Andrew Loebs
- * @brief		Main application	
- * 	
+ * @brief		Main application
+ *
  */
 
 #include <stdint.h>
 
-#include "st/stm32_assert.h"
 #include "st/ll/stm32l4xx_ll_bus.h"
 #include "st/ll/stm32l4xx_ll_rcc.h"
 #include "st/ll/stm32l4xx_ll_system.h"
 #include "st/ll/stm32l4xx_ll_utils.h"
+#include "st/stm32_assert.h"
 
 #include "modules/led.h"
 #include "modules/shell.h"
@@ -20,7 +20,7 @@
 #include "modules/uart.h"
 
 // defines
-#define STARTUP_LED_DURATION_MS         100
+#define STARTUP_LED_DURATION_MS 100
 
 // private function prototypes
 static void clock_config(void);
@@ -44,8 +44,7 @@ int main(void)
     led_set_output(false);
 
     // main loop
-    for (;;)
-    {
+    for (;;) {
         // tick functions
         shell_tick();
     }
@@ -55,22 +54,26 @@ int main(void)
 static void clock_config(void)
 {
     // enable prefetch & set latency -- icache and dcache are enabled by default
-    LL_FLASH_EnablePrefetch(); // according to the ref manual, this negates perf impact due to flash latency
+    LL_FLASH_EnablePrefetch(); // according to the ref manual, this negates perf impact due to flash
+                               // latency
     LL_FLASH_SetLatency(LL_FLASH_LATENCY_4);
     // enable MSI
     LL_RCC_MSI_Enable();
-    while (LL_RCC_MSI_IsReady() != 1); // TODO: add timeouts to these while loops
+    while (LL_RCC_MSI_IsReady() != 1)
+        ; // TODO: add timeouts to these while loops
 
     // pll config & enable
     LL_RCC_PLL_ConfigDomain_SYS(LL_RCC_PLLSOURCE_MSI, LL_RCC_PLLM_DIV_1, 40, LL_RCC_PLLR_DIV_2);
     LL_RCC_PLL_Enable();
     LL_RCC_PLL_EnableDomain_SYS();
-    while (LL_RCC_PLL_IsReady() != 1);
+    while (LL_RCC_PLL_IsReady() != 1)
+        ;
 
     // sys clk activation
     LL_RCC_SetAHBPrescaler(LL_RCC_SYSCLK_DIV_1);
     LL_RCC_SetSysClkSource(LL_RCC_SYS_CLKSOURCE_PLL);
-    while (LL_RCC_GetSysClkSource() != LL_RCC_SYS_CLKSOURCE_STATUS_PLL);
+    while (LL_RCC_GetSysClkSource() != LL_RCC_SYS_CLKSOURCE_STATUS_PLL)
+        ;
 
     // setup APB1 & APB2
     LL_RCC_SetAPB1Prescaler(LL_RCC_APB1_DIV_1);
