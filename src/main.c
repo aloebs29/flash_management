@@ -16,6 +16,7 @@
 #include "modules/led.h"
 #include "modules/shell.h"
 #include "modules/spi.h"
+#include "modules/spi_nand.h"
 #include "modules/sys_time.h"
 #include "modules/uart.h"
 
@@ -31,7 +32,7 @@ int main(void)
     // setup clock
     clock_config();
 
-    // init modules
+    // init base modules
     led_init();
     sys_time_init();
     uart_init();
@@ -42,6 +43,12 @@ int main(void)
     led_set_output(true);
     sys_time_delay(STARTUP_LED_DURATION_MS);
     led_set_output(false);
+
+    // init flash management stack
+    int ret = spi_nand_init();
+    if (SPI_NAND_RET_OK != ret) {
+        shell_printf_line("spi_nand_init failed, status: %d.", ret);
+    }
 
     // main loop
     for (;;) {

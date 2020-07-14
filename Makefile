@@ -21,6 +21,7 @@ SRCS += \
 	src/modules/shell.c \
 	src/modules/shell_cmd.c \
 	src/modules/spi.c \
+	src/modules/spi_nand.c \
 	src/modules/sys_time.c \
 	src/modules/uart.c \
 	src/syscalls.c \
