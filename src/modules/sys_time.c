@@ -30,9 +30,15 @@ void sys_time_init(void)
                                          SYSTICK_SUB_PRIORITY));
 }
 
-void _sys_time_increment(void) { sys_time_ms++; }
+void _sys_time_increment(void)
+{
+    sys_time_ms++;
+}
 
-uint32_t sys_time_get_ms(void) { return sys_time_ms; }
+uint32_t sys_time_get_ms(void)
+{
+    return sys_time_ms;
+}
 
 // TODO: add unit test for this function
 //  normal case

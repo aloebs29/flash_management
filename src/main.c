@@ -21,7 +21,7 @@
 #include "modules/uart.h"
 
 // defines
-#define STARTUP_LED_DURATION_MS 100
+#define STARTUP_LED_DURATION_MS 200
 
 // private function prototypes
 static void clock_config(void);
