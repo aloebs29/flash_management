@@ -9,6 +9,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <string.h>
 
 #include "../st/ll/stm32l4xx_ll_bus.h"
 #include "../st/ll/stm32l4xx_ll_gpio.h"
@@ -23,9 +24,12 @@
 #define RESET_DELAY 2    // ms
 #define OP_TIMEOUT  3000 // ms
 
-#define CMD_RESET       0xFF
-#define CMD_READ_ID     0x9F
-#define CMD_SET_FEATURE 0x1F
+#define CMD_RESET           0xFF
+#define CMD_READ_ID         0x9F
+#define CMD_SET_FEATURE     0x1F
+#define CMD_GET_FEATURE     0x0F
+#define CMD_PAGE_READ       0x13
+#define CMD_READ_FROM_CACHE 0x03
 
 #define READ_ID_TRANS_LEN    4
 #define READ_ID_MFR_INDEX    2
@@ -37,14 +41,70 @@
 #define FEATURE_REG_INDEX  1
 #define FEATURE_DATA_INDEX 2
 
-#define REG_STATUS 0xC0
-#define OIP_BIT    0
+#define PAGE_READ_TRANS_LEN       4
+#define READ_FROM_CACHE_TRANS_LEN 4
 
-#define REG_BLOCK_LOCK    0xA0
-#define UNLOCK_ALL_BLOCKS 0x00
+#define FEATURE_REG_STATUS        0xC0
+#define FEATURE_REG_BLOCK_LOCK    0xA0
+#define FEATURE_REG_CONFIGURATION 0xB0
+#define FEATURE_REG_DIE_SELECT    0xC0
 
-#define REG_ECC_EN 0xB0
-#define ECC_ENABLE 1 << 4
+#define ECC_STATUS_NO_ERR         0b000
+#define ECC_STATUS_1_3_NO_REFRESH 0b001
+#define ECC_STATUS_4_6_REFRESH    0b011
+#define ECC_STATUS_7_8_REFRESH    0b101
+#define ECC_STATUS_NOT_CORRECTED  0b010
+
+#define ROW_ADDRESS_BLOCK_SHIFT 6
+
+// private types
+typedef union {
+    uint8_t whole;
+    struct {
+        uint8_t : 1;
+        uint8_t WP_HOLD_DISABLE : 1;
+        uint8_t TB : 1;
+        uint8_t BP0 : 1;
+        uint8_t BP1 : 1;
+        uint8_t BP2 : 1;
+        uint8_t BP3 : 1;
+        uint8_t BRWD : 1;
+    };
+} feature_reg_block_lock_t;
+
+typedef union {
+    uint8_t whole;
+    struct {
+        uint8_t : 1;
+        uint8_t CFG0 : 1;
+        uint8_t : 2;
+        uint8_t ECC_EN : 1;
+        uint8_t LOT_EN : 1;
+        uint8_t CFG1 : 1;
+        uint8_t CFG2 : 1;
+    };
+} feature_reg_configuration_t;
+
+typedef union {
+    uint8_t whole;
+    struct {
+        uint8_t OIP : 1;
+        uint8_t WEL : 1;
+        uint8_t E_FAIL : 1;
+        uint8_t P_FAIL : 1;
+        uint8_t ECCS0_3 : 3;
+        uint8_t CRBSY : 1;
+    };
+} feature_reg_status_t;
+
+typedef union {
+    uint8_t whole;
+    struct {
+        uint8_t : 6;
+        uint8_t DS0 : 1;
+        uint8_t : 1;
+    };
+} feature_reg_die_select_t;
 
 // private function prototypes
 static void csel_setup(void);
@@ -59,10 +119,15 @@ static int enable_ecc(void);
 static int set_feature(uint8_t reg, uint8_t data);
 static int get_feature(uint8_t reg, uint8_t *data_out);
 
+static bool validate_row_address(block_address_t block_address, page_address_t page_address);
+static bool validate_column_address(column_address_t address);
+static int poll_for_oip_clear(uint32_t timeout);
+static int get_ecc_status(void);
+
 // public function definitions
 int spi_nand_init(void)
 {
-    // setup csel and set high
+    // initialize chip select
     csel_deselect();
     csel_setup();
 
@@ -85,6 +150,71 @@ int spi_nand_init(void)
     if (SPI_NAND_RET_OK != ret) return ret; // exit upon error
 
     return ret;
+}
+
+int spi_nand_read_page(block_address_t block_address, page_address_t page_address,
+                       column_address_t column_address, uint8_t *data_out, size_t data_out_len)
+{
+    // input validation
+    if (!validate_row_address(block_address, page_address) ||
+        !validate_column_address(column_address)) {
+        return SPI_NAND_RET_BAD_ADDRESS;
+    }
+    uint16_t read_len = SPI_NAND_PAGE_SIZE - column_address;
+    if (data_out_len < read_len) return SPI_NAND_RET_BUFFER_LEN;
+
+    // setup timeout tracking..
+    uint32_t start = sys_time_get_ms();
+
+    // setup data for page read command (need to go from LSB -> MSB first on address)
+    uint32_t row_address = ((uint32_t)block_address << ROW_ADDRESS_BLOCK_SHIFT) + page_address;
+    uint8_t page_read_tx_data[PAGE_READ_TRANS_LEN];
+    page_read_tx_data[0] = CMD_PAGE_READ;
+    page_read_tx_data[1] = row_address >> 16;
+    page_read_tx_data[2] = row_address >> 8;
+    page_read_tx_data[3] = row_address;
+    // perform transaction
+    csel_select();
+    uint32_t timeout = OP_TIMEOUT - sys_time_get_elapsed(start);
+    int ret = spi_write(page_read_tx_data, PAGE_READ_TRANS_LEN, timeout);
+    csel_deselect();
+    // exit if bad status
+    if (SPI_RET_OK != ret) return SPI_NAND_RET_BAD_SPI;
+
+    // wait until that operation finishes
+    timeout = OP_TIMEOUT - sys_time_get_elapsed(start);
+    ret = poll_for_oip_clear(timeout);
+    // exit if bad status
+    if (SPI_RET_OK != ret) return ret;
+
+    // check on the ecc bits
+    int ecc_status_ret = get_ecc_status();
+
+    // setup data for page read command (need to go from LSB -> MSB first on address)
+    uint8_t read_from_cache_tx_data[READ_FROM_CACHE_TRANS_LEN];
+    read_from_cache_tx_data[0] = CMD_READ_FROM_CACHE;
+    read_from_cache_tx_data[1] = column_address >> 8;
+    read_from_cache_tx_data[2] = column_address;
+    read_from_cache_tx_data[3] = 0;
+    // perform transaction
+    csel_select();
+    timeout = OP_TIMEOUT - sys_time_get_elapsed(start);
+    int tx_ret = spi_write(read_from_cache_tx_data, READ_FROM_CACHE_TRANS_LEN, timeout);
+    int rx_ret = spi_read(data_out, read_len, timeout);
+    csel_deselect();
+
+    /* Determine return status. We've accumulated the ecc status, and spi statuses from both the
+     * write and read op. Preference will be given to return bad SPI statuses so that the caller is
+     * aware that the return data is bad. */
+    if (SPI_RET_OK != tx_ret) {
+        return tx_ret;
+    }
+    else if (SPI_RET_OK != rx_ret) {
+        return rx_ret;
+    }
+    else {
+        return ecc_status_ret;
+    }
 }
 
 // private function definitions
@@ -122,28 +252,8 @@ static int reset(void)
     // exit if bad status
     if (SPI_RET_OK != ret) return SPI_NAND_RET_BAD_SPI;
 
-    // Poll for OIP bit clear
-    uint32_t start_time = sys_time_get_ms();
-    for (;;) {
-        uint8_t status;
-        ret = get_feature(REG_STATUS, &status);
-        // break on bad return -- keep this ret value to bubble up the error code
-        if (SPI_NAND_RET_OK != ret) {
-            break;
-        }
-        // check for OIP clear (which means reset is done)
-        if (0 == (status & OIP_BIT)) {
-            ret = SPI_NAND_RET_OK;
-            break;
-        }
-        // check for timeout
-        if (sys_time_is_elapsed(start_time, OP_TIMEOUT)) {
-            ret = SPI_NAND_RET_TIMEOUT;
-            break;
-        }
-    }
-
-    return ret;
+    // wait until op is done or we timeout
+    return poll_for_oip_clear(OP_TIMEOUT);
 }
 
 static int read_id(void)
@@ -177,12 +287,15 @@ static int read_id(void)
 
 static int unlock_all_blocks(void)
 {
-    return set_feature(REG_BLOCK_LOCK, UNLOCK_ALL_BLOCKS);
+    feature_reg_block_lock_t unlock_all = {.whole = 0};
+    return set_feature(FEATURE_REG_BLOCK_LOCK, unlock_all.whole);
 }
 
 static int enable_ecc(void)
 {
-    return set_feature(REG_ECC_EN, ECC_ENABLE); // we want to zero the other bits here
+    feature_reg_configuration_t ecc_enable = {.whole = 0}; // we want to zero the other bits here
+    ecc_enable.ECC_EN = 1;
+    return set_feature(FEATURE_REG_CONFIGURATION, ecc_enable.whole);
 }
 
 static int set_feature(uint8_t reg, uint8_t data)
@@ -206,7 +319,7 @@ static int get_feature(uint8_t reg, uint8_t *data_out)
     // setup data
     uint8_t tx_data[FEATURE_TRANS_LEN] = {0};
     uint8_t rx_data[FEATURE_TRANS_LEN] = {0};
-    tx_data[0] = CMD_SET_FEATURE;
+    tx_data[0] = CMD_GET_FEATURE;
     tx_data[FEATURE_REG_INDEX] = reg;
     // perform transaction
     csel_select();
@@ -221,4 +334,73 @@ static int get_feature(uint8_t reg, uint8_t *data_out)
     else {
         return SPI_NAND_RET_BAD_SPI;
     }
+}
+
+static bool validate_row_address(block_address_t block_address, page_address_t page_address)
+{
+    if ((block_address > SPI_NAND_MAX_BLOCK_ADDRESS) ||
+        (page_address > SPI_NAND_MAX_PAGE_ADDRESS)) {
+        return false;
+    }
+    else {
+        return true;
+    }
+}
+
+static bool validate_column_address(column_address_t address)
+{
+    if (address > SPI_NAND_MAX_BYTE_ADDRESS) {
+        return false;
+    }
+    else {
+        return true;
+    }
+}
+
+static int poll_for_oip_clear(uint32_t timeout)
+{
+    uint32_t start_time = sys_time_get_ms();
+    for (;;) {
+        feature_reg_status_t status;
+        int ret = get_feature(FEATURE_REG_STATUS, &status.whole);
+        // break on bad return
+        if (SPI_NAND_RET_OK != ret) {
+            return ret;
+        }
+        // check for OIP clear
+        if (0 == status.OIP) {
+            return SPI_NAND_RET_OK;
+        }
+        // check for timeout
+        if (sys_time_is_elapsed(start_time, timeout)) {
+            return SPI_NAND_RET_TIMEOUT;
+        }
+    }
+}
+
+static int get_ecc_status(void)
+{
+    feature_reg_status_t status = {.whole = 0};
+    // get status reg
+    int ret = get_feature(FEATURE_REG_STATUS, &status.whole);
+    // exit on error
+    if (SPI_NAND_RET_OK != ret) return ret;
+
+    // map ECC status to return type
+    switch (status.ECCS0_3) {
+        case ECC_STATUS_NO_ERR:
+        case ECC_STATUS_1_3_NO_REFRESH:
+            ret = SPI_NAND_RET_OK;
+            break;
+        case ECC_STATUS_4_6_REFRESH:
+        case ECC_STATUS_7_8_REFRESH:
+            ret = SPI_NAND_RET_ECC_REFRESH;
+            break;
+        case ECC_STATUS_NOT_CORRECTED:
+        default:
+            ret = SPI_NAND_RET_ECC_ERR;
+            break;
+    }
+
+    return ret;
 }

@@ -23,6 +23,9 @@ void _sys_time_increment(void);
 /// @brief Returns system time counter (which tracks milliseconds)
 uint32_t sys_time_get_ms(void);
 
+/// @brief Returns the number of milliseconds elapsed since the start value
+uint32_t sys_time_get_elapsed(uint32_t start);
+
 /// @brief Checks whether a given time duration has elapsed since a given start time
 bool sys_time_is_elapsed(uint32_t start, uint32_t duration_ms);
 

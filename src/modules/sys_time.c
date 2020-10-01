@@ -40,6 +40,11 @@ uint32_t sys_time_get_ms(void)
     return sys_time_ms;
 }
 
+uint32_t sys_time_get_elapsed(uint32_t start)
+{
+    return sys_time_ms - start;
+}
+
 // TODO: add unit test for this function
 //  normal case
 //  current time overlapped, end time not overlapped
@@ -48,26 +53,7 @@ uint32_t sys_time_get_ms(void)
 //  all above cases when duration is 0
 bool sys_time_is_elapsed(uint32_t start, uint32_t duration_ms)
 {
-    uint32_t current = sys_time_ms; // snapshot the current time
-    uint32_t end = start + duration_ms;
-
-    // if current has overflowed
-    if (current < start) {
-        if (end >= start) {
-            // end didn't overflow, so the time must have elapsed
-            return true;
-        }
-    }
-    // if current has not overflowed
-    else {
-        if (end < start) {
-            // end overflowed, so the time cannot have elapsed
-            return false;
-        }
-    }
-
-    // they either both overflowed, or both did not overflow, so just compare
-    return (current >= end);
+    return (sys_time_get_elapsed(start) >= duration_ms);
 }
 
 void sys_time_delay(uint32_t duration_ms)

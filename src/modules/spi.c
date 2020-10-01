@@ -81,7 +81,7 @@ int spi_write(uint8_t *write_buff, size_t write_len, uint32_t timeout_ms)
             }
         }
         // transmit data
-        LL_SPI_TransmitData8(SPI_INSTANCE, 0);
+        LL_SPI_TransmitData8(SPI_INSTANCE, write_buff[i]);
         // block until rx not empty
         while (!LL_SPI_IsActiveFlag_RXNE(SPI_INSTANCE)) {
             if (sys_time_is_elapsed(start_time, timeout_ms)) {

@@ -24,7 +24,6 @@ static void receive_buffer_push(char c);
 
 static bool try_get_char(char *out);
 static void echo(char c);
-static void put_newline(void);
 static void put_prompt(void);
 
 // private variables
@@ -36,7 +35,7 @@ void shell_init(void)
 {
     receive_buffer_reset();
     // start with fresh newline and prompt
-    put_newline();
+    shell_put_newline();
     put_prompt();
 }
 
@@ -51,7 +50,7 @@ void shell_tick(void)
             // if carriage return, process command
             if ('\r' == c) {
                 shell_cmd_process(receive_buffer, receive_buffer_len());
-                put_newline(); // more readable with the extra newline
+                shell_put_newline(); // more readable with the extra newline
                 put_prompt();
                 receive_buffer_reset();
             }
@@ -72,7 +71,15 @@ void shell_print_line(const char *string)
         putchar(*string);
         string++;
     }
-    put_newline();
+    shell_put_newline();
+}
+
+void shell_printf(const char *format, ...)
+{
+    va_list args;
+    va_start(args, format);
+    vprintf(format, args);
+    va_end(args);
 }
 
 void shell_printf_line(const char *format, ...)
@@ -83,7 +90,13 @@ void shell_printf_line(const char *format, ...)
     vprintf(format, args);
     va_end(args);
     // newline
-    put_newline();
+    shell_put_newline();
+}
+
+void shell_put_newline(void)
+{
+    putchar('\r');
+    putchar('\n');
 }
 
 // private function definitions
@@ -93,9 +106,15 @@ static void receive_buffer_reset(void)
     receive_index = 0;
 }
 
-static bool receive_buffer_is_full(void) { return receive_index >= (RECEIVE_BUFFER_LEN - 1); }
+static bool receive_buffer_is_full(void)
+{
+    return receive_index >= (RECEIVE_BUFFER_LEN - 1);
+}
 
-static size_t receive_buffer_len(void) { return receive_index; }
+static size_t receive_buffer_len(void)
+{
+    return receive_index;
+}
 
 static void receive_buffer_push(char c)
 {
@@ -124,7 +143,7 @@ static void echo(char c)
 {
     // handle newline
     if ('\r' == c) {
-        put_newline();
+        shell_put_newline();
     }
     // handle backspace
     else if ('\b' == c) {
@@ -136,14 +155,6 @@ static void echo(char c)
     else {
         putchar(c);
     }
-}
-
-static void put_newline(void)
-{
-    // this keeps our newline in a single function in case we decide to use a different
-    // line ending in the future
-    putchar('\r');
-    putchar('\n');
 }
 
 static void put_prompt(void)
