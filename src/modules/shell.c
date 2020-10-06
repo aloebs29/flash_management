@@ -34,7 +34,10 @@ static size_t receive_index;
 void shell_init(void)
 {
     receive_buffer_reset();
-    // start with fresh newline and prompt
+    // start with welcome message and prompt
+    shell_put_newline();
+    shell_put_newline();
+    shell_print_line("==== shell started! ====");
     shell_put_newline();
     put_prompt();
 }

@@ -27,8 +27,8 @@ enum {
 
 #define SPI_NAND_MAX_BLOCK_ADDRESS 1023
 #define SPI_NAND_MAX_PAGE_ADDRESS  63
-#define SPI_NAND_PAGE_SIZE         2176 // 2k + 128
-#define SPI_NAND_MAX_BYTE_ADDRESS  (SPI_NAND_PAGE_SIZE - 1)
+#define SPI_NAND_PAGE_SIZE         2048
+#define SPI_NAND_OOB_SIZE          64
 
 /// @brief Nand block address (valid range 0-1023)
 typedef uint16_t block_address_t;
@@ -41,7 +41,11 @@ typedef uint16_t column_address_t;
 int spi_nand_init(void);
 
 /// @brief Performs a read page operation
-int spi_nand_read_page(block_address_t block_address, page_address_t page_address,
-                       column_address_t column_address, uint8_t *data_out, size_t data_out_len);
+int spi_nand_page_read(block_address_t block, page_address_t page, column_address_t column,
+                       uint8_t *data_out, size_t data_out_len);
+
+/// @brief Performs a page program operation
+int spi_nand_page_program(block_address_t block, page_address_t page, column_address_t column,
+                          uint8_t *data_in, size_t data_in_len);
 
 #endif // __SPI_NAND_H

@@ -30,6 +30,7 @@ typedef struct {
 // private function prototypes
 static void command_help(int argc, char *argv[]);
 static void command_read_page(int argc, char *argv[]);
+static void command_write_page(int argc, char *argv[]);
 
 static const shell_command_t *find_command(const char *name);
 static void print_bytes(uint8_t *data, size_t len);
@@ -38,7 +39,10 @@ static void print_bytes(uint8_t *data, size_t len);
 static const shell_command_t shell_commands[] = {
     {"help", command_help, "Prints all commands and their associated help text.", "help"},
     {"read_page", command_read_page, "Reads a page from the SPI NAND memory unit.",
-     "read_page <block> <page> <start byte>"},
+     "read_page <block> <page> <column>"},
+    {"write_page", command_write_page,
+     "Writes a value (repeated) to a page of the SPI NAND memory unit.",
+     "write_page <block> <page> <column> <value>"},
 };
 
 // private variables
@@ -90,7 +94,7 @@ static void command_help(int argc, char *argv[])
 static void command_read_page(int argc, char *argv[])
 {
     if (argc != 4) {
-        shell_printf_line("read_page requires block, page, and start byte arguments. Type \"help\" "
+        shell_printf_line("read_page requires block, page, and column arguments. Type \"help\" "
                           "for more info.");
         return;
     }
@@ -98,20 +102,54 @@ static void command_read_page(int argc, char *argv[])
     // parse arguments
     block_address_t block;
     page_address_t page;
-    column_address_t start_byte;
+    column_address_t column;
     sscanf(argv[1], "%hu", &block);
-    sscanf(argv[2], "%c", &page);
-    sscanf(argv[3], "%hu", &start_byte);
+    sscanf(argv[2], "%hhu", &page);
+    sscanf(argv[3], "%hu", &column);
 
     // attempt to read..
-    int ret = spi_nand_read_page(block, page, start_byte, page_buffer, sizeof(page_buffer));
+    int ret = spi_nand_page_read(block, page, column, page_buffer, sizeof(page_buffer));
 
     // check for error..
     if (SPI_NAND_RET_OK != ret) {
         shell_printf_line("Error when attempting to read page: %d.", ret);
     }
     else {
-        print_bytes(page_buffer, sizeof(page_buffer) - start_byte);
+        print_bytes(page_buffer, sizeof(page_buffer) - column);
+    }
+}
+
+static void command_write_page(int argc, char *argv[])
+{
+    if (argc != 5) {
+        shell_printf_line(
+            "write_page requires block, page, column, and value arguments. Type \"help\" "
+            "for more info.");
+        return;
+    }
+
+    // parse arguments
+    block_address_t block;
+    page_address_t page;
+    column_address_t column;
+    uint8_t value;
+    sscanf(argv[1], "%hu", &block);
+    sscanf(argv[2], "%hhu", &page);
+    sscanf(argv[3], "%hu", &column);
+    sscanf(argv[4], "%hhu", &value);
+
+    // create write data
+    size_t write_len = sizeof(page_buffer) - column;
+    memset(page_buffer, value, write_len);
+    // attempt to write..
+    int ret = spi_nand_page_program(block, page, column, page_buffer, write_len);
+
+    // check for error..
+    if (SPI_NAND_RET_OK != ret) {
+        shell_printf_line("Error when attempting to write page: %d.", ret);
+    }
+    else {
+        shell_printf_line("Write page successful.");
     }
 }
 

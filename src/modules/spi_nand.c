@@ -30,6 +30,9 @@
 #define CMD_GET_FEATURE     0x0F
 #define CMD_PAGE_READ       0x13
 #define CMD_READ_FROM_CACHE 0x03
+#define CMD_WRITE_ENABLE    0x06
+#define CMD_PROGRAM_LOAD    0x02
+#define CMD_PROGRAM_EXECUTE 0x10
 
 #define READ_ID_TRANS_LEN    4
 #define READ_ID_MFR_INDEX    2
@@ -43,6 +46,8 @@
 
 #define PAGE_READ_TRANS_LEN       4
 #define READ_FROM_CACHE_TRANS_LEN 4
+#define PROGRAM_LOAD_TRANS_LEN    3
+#define PROGRAM_EXECUTE_TRANS_LEN 4
 
 #define FEATURE_REG_STATUS        0xC0
 #define FEATURE_REG_BLOCK_LOCK    0xA0
@@ -116,13 +121,15 @@ static int read_id(void);
 static int unlock_all_blocks(void);
 static int enable_ecc(void);
 
-static int set_feature(uint8_t reg, uint8_t data);
-static int get_feature(uint8_t reg, uint8_t *data_out);
+static int set_feature(uint8_t reg, uint8_t data, uint32_t timeout);
+static int get_feature(uint8_t reg, uint8_t *data_out, uint32_t timeout);
 
 static bool validate_row_address(block_address_t block_address, page_address_t page_address);
 static bool validate_column_address(column_address_t address);
 static int poll_for_oip_clear(uint32_t timeout);
-static int get_ecc_status(void);
+static int get_ecc_status(uint32_t timeout);
+
+static int write_enable(uint32_t timeout);
 
 // public function definitions
 int spi_nand_init(void)
@@ -152,22 +159,21 @@ int spi_nand_init(void)
     return ret;
 }
 
-int spi_nand_read_page(block_address_t block_address, page_address_t page_address,
-                       column_address_t column_address, uint8_t *data_out, size_t data_out_len)
+int spi_nand_page_read(block_address_t block, page_address_t page, column_address_t column,
+                       uint8_t *data_out, size_t data_out_len)
 {
     // input validation
-    if (!validate_row_address(block_address, page_address) ||
-        !validate_column_address(column_address)) {
+    if (!validate_row_address(block, page) || !validate_column_address(column)) {
         return SPI_NAND_RET_BAD_ADDRESS;
     }
-    uint16_t read_len = SPI_NAND_PAGE_SIZE - column_address;
-    if (data_out_len < read_len) return SPI_NAND_RET_BUFFER_LEN;
+    uint16_t read_len = (SPI_NAND_PAGE_SIZE + SPI_NAND_OOB_SIZE) - column;
+    if (data_out_len < read_len) read_len = data_out_len; // truncate to the caller's buffer size
 
-    // setup timeout tracking..
+    // setup timeout tracking
     uint32_t start = sys_time_get_ms();
 
     // setup data for page read command (need to go from LSB -> MSB first on address)
-    uint32_t row_address = ((uint32_t)block_address << ROW_ADDRESS_BLOCK_SHIFT) + page_address;
+    uint32_t row_address = ((uint32_t)block << ROW_ADDRESS_BLOCK_SHIFT) + page;
     uint8_t page_read_tx_data[PAGE_READ_TRANS_LEN];
     page_read_tx_data[0] = CMD_PAGE_READ;
     page_read_tx_data[1] = row_address >> 16;
@@ -187,34 +193,90 @@ int spi_nand_read_page(block_address_t block_address, page_address_t page_addres
     // exit if bad status
     if (SPI_RET_OK != ret) return ret;
 
-    // check on the ecc bits
-    int ecc_status_ret = get_ecc_status();
+    // check ecc
+    timeout = OP_TIMEOUT - sys_time_get_elapsed(start);
+    int ecc_status_ret = get_ecc_status(timeout);
 
     // setup data for page read command (need to go from LSB -> MSB first on address)
     uint8_t read_from_cache_tx_data[READ_FROM_CACHE_TRANS_LEN];
     read_from_cache_tx_data[0] = CMD_READ_FROM_CACHE;
-    read_from_cache_tx_data[1] = column_address >> 8;
-    read_from_cache_tx_data[2] = column_address;
+    read_from_cache_tx_data[1] = column >> 8;
+    read_from_cache_tx_data[2] = column;
     read_from_cache_tx_data[3] = 0;
     // perform transaction
     csel_select();
     timeout = OP_TIMEOUT - sys_time_get_elapsed(start);
-    int tx_ret = spi_write(read_from_cache_tx_data, READ_FROM_CACHE_TRANS_LEN, timeout);
-    int rx_ret = spi_read(data_out, read_len, timeout);
+    ret = spi_write(read_from_cache_tx_data, READ_FROM_CACHE_TRANS_LEN, timeout);
+    if (SPI_RET_OK == ret) {
+        timeout = OP_TIMEOUT - sys_time_get_elapsed(start);
+        ret = spi_read(data_out, read_len, timeout);
+    }
     csel_deselect();
 
-    /* Determine return status. We've accumulated the ecc status, and spi statuses from both the
+    /* Determine return status. We've accumulated the ecc status, and spi status from both the
      * write and read op. Preference will be given to return bad SPI statuses so that the caller is
      * aware that the return data is bad. */
-    if (SPI_RET_OK != tx_ret) {
-        return tx_ret;
-    }
-    else if (SPI_RET_OK != rx_ret) {
-        return rx_ret;
+    if (SPI_RET_OK != ret) {
+        return ret;
     }
     else {
         return ecc_status_ret;
     }
+}
+
+int spi_nand_page_program(block_address_t block, page_address_t page, column_address_t column,
+                          uint8_t *data_in, size_t data_in_len)
+{
+    // input validation
+    if (!validate_row_address(block, page) || !validate_column_address(column)) {
+        return SPI_NAND_RET_BAD_ADDRESS;
+    }
+    uint16_t max_write_len = (SPI_NAND_PAGE_SIZE + SPI_NAND_OOB_SIZE) - column;
+    if (data_in_len > max_write_len) return SPI_NAND_RET_BUFFER_LEN;
+
+    // setup timeout tracking
+    uint32_t start = sys_time_get_ms();
+
+    // write enable
+    int ret = write_enable(OP_TIMEOUT); // ignore the time elapsed since start since its negligible
+    // exit if bad status
+    if (SPI_NAND_RET_OK != ret) return ret;
+
+    // setup data for program load (need to go from LSB -> MSB first on address)
+    uint8_t program_load_tx_data[PROGRAM_LOAD_TRANS_LEN];
+    program_load_tx_data[0] = CMD_PROGRAM_LOAD;
+    program_load_tx_data[1] = column >> 8;
+    program_load_tx_data[2] = column;
+    // perform transaction
+    csel_select();
+    uint32_t timeout = OP_TIMEOUT - sys_time_get_elapsed(start);
+    ret = spi_write(program_load_tx_data, PROGRAM_LOAD_TRANS_LEN, timeout);
+    if (SPI_RET_OK == ret) {
+        timeout = OP_TIMEOUT - sys_time_get_elapsed(start);
+        ret = spi_write(data_in, data_in_len, timeout);
+    }
+    csel_deselect();
+    // exit if bad status
+    if (SPI_RET_OK != ret) return SPI_NAND_RET_BAD_SPI;
+
+    // setup data for program execute (need to go from LSB -> MSB first on address)
+    uint32_t row_address = ((uint32_t)block << ROW_ADDRESS_BLOCK_SHIFT) + page;
+    uint8_t program_execute_tx_data[PROGRAM_EXECUTE_TRANS_LEN];
+    program_execute_tx_data[0] = CMD_PROGRAM_EXECUTE;
+    program_execute_tx_data[1] = row_address >> 16;
+    program_execute_tx_data[2] = row_address >> 8;
+    program_execute_tx_data[3] = row_address;
+    // perform transaction
+    csel_select();
+    timeout = OP_TIMEOUT - sys_time_get_elapsed(start);
+    ret = spi_write(program_execute_tx_data, PAGE_READ_TRANS_LEN, timeout);
+    csel_deselect();
+    // exit if bad status
+    if (SPI_RET_OK != ret) return SPI_NAND_RET_BAD_SPI;
+
+    // wait until that operation finishes
+    timeout = OP_TIMEOUT - sys_time_get_elapsed(start);
+    return poll_for_oip_clear(timeout);
 }
 
 // private function definitions
@@ -288,17 +350,17 @@ static int read_id(void)
 static int unlock_all_blocks(void)
 {
     feature_reg_block_lock_t unlock_all = {.whole = 0};
-    return set_feature(FEATURE_REG_BLOCK_LOCK, unlock_all.whole);
+    return set_feature(FEATURE_REG_BLOCK_LOCK, unlock_all.whole, OP_TIMEOUT);
 }
 
 static int enable_ecc(void)
 {
     feature_reg_configuration_t ecc_enable = {.whole = 0}; // we want to zero the other bits here
     ecc_enable.ECC_EN = 1;
-    return set_feature(FEATURE_REG_CONFIGURATION, ecc_enable.whole);
+    return set_feature(FEATURE_REG_CONFIGURATION, ecc_enable.whole, OP_TIMEOUT);
 }
 
-static int set_feature(uint8_t reg, uint8_t data)
+static int set_feature(uint8_t reg, uint8_t data, uint32_t timeout)
 {
     // setup data
     uint8_t tx_data[FEATURE_TRANS_LEN] = {0};
@@ -307,14 +369,14 @@ static int set_feature(uint8_t reg, uint8_t data)
     tx_data[FEATURE_DATA_INDEX] = data;
     // perform transaction
     csel_select();
-    int ret = spi_write(tx_data, FEATURE_TRANS_LEN, OP_TIMEOUT);
+    int ret = spi_write(tx_data, FEATURE_TRANS_LEN, timeout);
     csel_deselect();
 
     // map spi return to spi nand return
     return (SPI_RET_OK == ret) ? SPI_NAND_RET_OK : SPI_NAND_RET_BAD_SPI;
 }
 
-static int get_feature(uint8_t reg, uint8_t *data_out)
+static int get_feature(uint8_t reg, uint8_t *data_out, uint32_t timeout)
 {
     // setup data
     uint8_t tx_data[FEATURE_TRANS_LEN] = {0};
@@ -323,7 +385,7 @@ static int get_feature(uint8_t reg, uint8_t *data_out)
     tx_data[FEATURE_REG_INDEX] = reg;
     // perform transaction
     csel_select();
-    int ret = spi_write_read(tx_data, rx_data, FEATURE_TRANS_LEN, OP_TIMEOUT);
+    int ret = spi_write_read(tx_data, rx_data, FEATURE_TRANS_LEN, timeout);
     csel_deselect();
 
     // if good return, write data out
@@ -349,7 +411,7 @@ static bool validate_row_address(block_address_t block_address, page_address_t p
 
 static bool validate_column_address(column_address_t address)
 {
-    if (address > SPI_NAND_MAX_BYTE_ADDRESS) {
+    if (address >= (SPI_NAND_PAGE_SIZE + SPI_NAND_OOB_SIZE)) {
         return false;
     }
     else {
@@ -361,8 +423,9 @@ static int poll_for_oip_clear(uint32_t timeout)
 {
     uint32_t start_time = sys_time_get_ms();
     for (;;) {
+        uint32_t get_feature_timeout = OP_TIMEOUT - sys_time_get_elapsed(start_time);
         feature_reg_status_t status;
-        int ret = get_feature(FEATURE_REG_STATUS, &status.whole);
+        int ret = get_feature(FEATURE_REG_STATUS, &status.whole, get_feature_timeout);
         // break on bad return
         if (SPI_NAND_RET_OK != ret) {
             return ret;
@@ -378,11 +441,11 @@ static int poll_for_oip_clear(uint32_t timeout)
     }
 }
 
-static int get_ecc_status(void)
+static int get_ecc_status(uint32_t timeout)
 {
     feature_reg_status_t status = {.whole = 0};
     // get status reg
-    int ret = get_feature(FEATURE_REG_STATUS, &status.whole);
+    int ret = get_feature(FEATURE_REG_STATUS, &status.whole, timeout);
     // exit on error
     if (SPI_NAND_RET_OK != ret) return ret;
 
@@ -403,4 +466,17 @@ static int get_ecc_status(void)
     }
 
     return ret;
+}
+
+static int write_enable(uint32_t timeout)
+{
+    // setup data
+    uint8_t cmd = CMD_WRITE_ENABLE;
+    // perform transaction
+    csel_select();
+    int ret = spi_write(&cmd, sizeof(cmd), timeout);
+    csel_deselect();
+
+    // map spi return to spi nand return
+    return (SPI_RET_OK == ret) ? SPI_NAND_RET_OK : SPI_NAND_RET_BAD_SPI;
 }
