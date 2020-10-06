@@ -126,7 +126,7 @@ static int get_feature(uint8_t reg, uint8_t *data_out, uint32_t timeout);
 
 static bool validate_row_address(block_address_t block_address, page_address_t page_address);
 static bool validate_column_address(column_address_t address);
-static int poll_for_oip_clear(uint32_t timeout);
+static int poll_for_oip_clear(feature_reg_status_t *status_out, uint32_t timeout);
 static int get_ecc_status(uint32_t timeout);
 
 static int write_enable(uint32_t timeout);
@@ -188,8 +188,9 @@ int spi_nand_page_read(block_address_t block, page_address_t page, column_addres
     if (SPI_RET_OK != ret) return SPI_NAND_RET_BAD_SPI;
 
     // wait until that operation finishes
+    feature_reg_status_t status;
     timeout = OP_TIMEOUT - sys_time_get_elapsed(start);
-    ret = poll_for_oip_clear(timeout);
+    ret = poll_for_oip_clear(&status, timeout);
     // exit if bad status
     if (SPI_RET_OK != ret) return ret;
 
@@ -275,8 +276,19 @@ int spi_nand_page_program(block_address_t block, page_address_t page, column_add
     if (SPI_RET_OK != ret) return SPI_NAND_RET_BAD_SPI;
 
     // wait until that operation finishes
+    feature_reg_status_t status;
     timeout = OP_TIMEOUT - sys_time_get_elapsed(start);
-    return poll_for_oip_clear(timeout);
+    ret = poll_for_oip_clear(&status, timeout);
+
+    if (SPI_RET_OK != ret) { // if polling failed, return that status
+        return ret;
+    }
+    else if (status.P_FAIL) { // otherwise, check for P_FAIL
+        return SPI_NAND_RET_P_FAIL;
+    }
+    else {
+        return SPI_NAND_RET_OK;
+    }
 }
 
 // private function definitions
@@ -315,7 +327,8 @@ static int reset(void)
     if (SPI_RET_OK != ret) return SPI_NAND_RET_BAD_SPI;
 
     // wait until op is done or we timeout
-    return poll_for_oip_clear(OP_TIMEOUT);
+    feature_reg_status_t status;
+    return poll_for_oip_clear(&status, OP_TIMEOUT);
 }
 
 static int read_id(void)
@@ -419,19 +432,18 @@ static bool validate_column_address(column_address_t address)
     }
 }
 
-static int poll_for_oip_clear(uint32_t timeout)
+static int poll_for_oip_clear(feature_reg_status_t *status_out, uint32_t timeout)
 {
     uint32_t start_time = sys_time_get_ms();
     for (;;) {
         uint32_t get_feature_timeout = OP_TIMEOUT - sys_time_get_elapsed(start_time);
-        feature_reg_status_t status;
-        int ret = get_feature(FEATURE_REG_STATUS, &status.whole, get_feature_timeout);
+        int ret = get_feature(FEATURE_REG_STATUS, &status_out->whole, get_feature_timeout);
         // break on bad return
         if (SPI_NAND_RET_OK != ret) {
             return ret;
         }
         // check for OIP clear
-        if (0 == status.OIP) {
+        if (0 == status_out->OIP) {
             return SPI_NAND_RET_OK;
         }
         // check for timeout
