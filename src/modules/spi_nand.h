@@ -24,6 +24,7 @@ enum {
     SPI_NAND_RET_ECC_REFRESH = -6,
     SPI_NAND_RET_ECC_ERR = -7,
     SPI_NAND_RET_P_FAIL = -8,
+    SPI_NAND_RET_E_FAIL = -9,
 };
 
 #define SPI_NAND_MAX_BLOCK_ADDRESS 1023
@@ -48,5 +49,8 @@ int spi_nand_page_read(block_address_t block, page_address_t page, column_addres
 /// @brief Performs a page program operation
 int spi_nand_page_program(block_address_t block, page_address_t page, column_address_t column,
                           uint8_t *data_in, size_t data_in_len);
+
+/// @brief Performs a block erase operation
+int spi_nand_block_erase(block_address_t block);
 
 #endif // __SPI_NAND_H

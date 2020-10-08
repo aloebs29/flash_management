@@ -121,8 +121,16 @@ static size_t receive_buffer_len(void)
 
 static void receive_buffer_push(char c)
 {
-    receive_buffer[receive_index] = c;
-    receive_index++;
+    if ('\b' == c) {
+        if (receive_index != 0) {
+            receive_index--;
+            receive_buffer[receive_index] = 0;
+        }
+    }
+    else {
+        receive_buffer[receive_index] = c;
+        receive_index++;
+    }
 }
 
 static bool try_get_char(char *out)

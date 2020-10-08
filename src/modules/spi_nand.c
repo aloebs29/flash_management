@@ -33,6 +33,7 @@
 #define CMD_WRITE_ENABLE    0x06
 #define CMD_PROGRAM_LOAD    0x02
 #define CMD_PROGRAM_EXECUTE 0x10
+#define CMD_BLOCK_ERASE     0xD8
 
 #define READ_ID_TRANS_LEN    4
 #define READ_ID_MFR_INDEX    2
@@ -48,6 +49,7 @@
 #define READ_FROM_CACHE_TRANS_LEN 4
 #define PROGRAM_LOAD_TRANS_LEN    3
 #define PROGRAM_EXECUTE_TRANS_LEN 4
+#define BLOCK_ERASE_TRANS_LEN     4
 
 #define FEATURE_REG_STATUS        0xC0
 #define FEATURE_REG_BLOCK_LOCK    0xA0
@@ -285,6 +287,52 @@ int spi_nand_page_program(block_address_t block, page_address_t page, column_add
     }
     else if (status.P_FAIL) { // otherwise, check for P_FAIL
         return SPI_NAND_RET_P_FAIL;
+    }
+    else {
+        return SPI_NAND_RET_OK;
+    }
+}
+
+int spi_nand_block_erase(block_address_t block)
+{
+    // input validation
+    if (!validate_row_address(block, 0)) {
+        return SPI_NAND_RET_BAD_ADDRESS;
+    }
+
+    // setup timeout tracking
+    uint32_t start = sys_time_get_ms();
+
+    // write enable
+    int ret = write_enable(OP_TIMEOUT); // ignore the time elapsed since start since its negligible
+    // exit if bad status
+    if (SPI_NAND_RET_OK != ret) return ret;
+
+    // setup data for block erase command (need to go from LSB -> MSB first on address)
+    uint32_t row_address = (uint32_t)block << ROW_ADDRESS_BLOCK_SHIFT;
+    uint8_t tx_data[BLOCK_ERASE_TRANS_LEN];
+    tx_data[0] = CMD_BLOCK_ERASE;
+    tx_data[1] = row_address >> 16;
+    tx_data[2] = row_address >> 8;
+    tx_data[3] = row_address;
+    // perform transaction
+    csel_select();
+    uint32_t timeout = OP_TIMEOUT - sys_time_get_elapsed(start);
+    ret = spi_write(tx_data, BLOCK_ERASE_TRANS_LEN, timeout);
+    csel_deselect();
+    // exit if bad status
+    if (SPI_RET_OK != ret) return SPI_NAND_RET_BAD_SPI;
+
+    // wait until that operation finishes
+    feature_reg_status_t status;
+    timeout = OP_TIMEOUT - sys_time_get_elapsed(start);
+    ret = poll_for_oip_clear(&status, timeout);
+
+    if (SPI_RET_OK != ret) { // if polling failed, return that status
+        return ret;
+    }
+    else if (status.E_FAIL) { // otherwise, check for E_FAIL
+        return SPI_NAND_RET_E_FAIL;
     }
     else {
         return SPI_NAND_RET_OK;

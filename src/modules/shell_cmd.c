@@ -31,6 +31,7 @@ typedef struct {
 static void command_help(int argc, char *argv[]);
 static void command_read_page(int argc, char *argv[]);
 static void command_write_page(int argc, char *argv[]);
+static void command_erase_block(int argc, char *argv[]);
 
 static const shell_command_t *find_command(const char *name);
 static void print_bytes(uint8_t *data, size_t len);
@@ -43,6 +44,8 @@ static const shell_command_t shell_commands[] = {
     {"write_page", command_write_page,
      "Writes a value (repeated) to a page of the SPI NAND memory unit.",
      "write_page <block> <page> <column> <value>"},
+    {"erase_block", command_erase_block, "Erases a block of the SPI NAND memory unit.",
+     "erase_block <block>"},
 };
 
 // private variables
@@ -100,11 +103,9 @@ static void command_read_page(int argc, char *argv[])
     }
 
     // parse arguments
-    block_address_t block;
-    page_address_t page;
-    column_address_t column;
+    uint16_t block, page, column;
     sscanf(argv[1], "%hu", &block);
-    sscanf(argv[2], "%hhu", &page);
+    sscanf(argv[2], "%hu", &page);
     sscanf(argv[3], "%hu", &column);
 
     // attempt to read..
@@ -129,14 +130,11 @@ static void command_write_page(int argc, char *argv[])
     }
 
     // parse arguments
-    block_address_t block;
-    page_address_t page;
-    column_address_t column;
-    uint8_t value;
+    uint16_t block, page, column, value;
     sscanf(argv[1], "%hu", &block);
-    sscanf(argv[2], "%hhu", &page);
+    sscanf(argv[2], "%hu", &page);
     sscanf(argv[3], "%hu", &column);
-    sscanf(argv[4], "%hhu", &value);
+    sscanf(argv[4], "%hu", &value);
 
     // create write data
     size_t write_len = sizeof(page_buffer) - column;
@@ -150,6 +148,30 @@ static void command_write_page(int argc, char *argv[])
     }
     else {
         shell_printf_line("Write page successful.");
+    }
+}
+
+static void command_erase_block(int argc, char *argv[])
+{
+    if (argc != 2) {
+        shell_printf_line("erase_block requires a block number as an argument. Type \"help\" "
+                          "for more info.");
+        return;
+    }
+
+    // parse arguments
+    uint16_t block;
+    sscanf(argv[1], "%hu", &block);
+
+    // attempt to erase..
+    int ret = spi_nand_block_erase(block);
+
+    // check for error..
+    if (SPI_NAND_RET_OK != ret) {
+        shell_printf_line("Error when attempting to erase block: %d.", ret);
+    }
+    else {
+        shell_printf_line("Block erase successful.");
     }
 }
 
