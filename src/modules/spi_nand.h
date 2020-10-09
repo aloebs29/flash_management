@@ -10,6 +10,7 @@
 #ifndef __SPI_NAND_H
 #define __SPI_NAND_H
 
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -25,7 +26,6 @@ enum {
     SPI_NAND_RET_ECC_ERR = -7,
     SPI_NAND_RET_P_FAIL = -8,
     SPI_NAND_RET_E_FAIL = -9,
-    SPI_NAND_RET_BAD_BLOCK = -10,
 };
 
 #define SPI_NAND_PAGE_SIZE       2048
@@ -60,9 +60,12 @@ int spi_nand_block_erase(block_address_t block);
 /// @brief Checks if a given block is bad
 /// @return SPI_NAND_RET_OK if good block, SPI_NAND_RET_BAD_BLOCK if bad, other returns if error is
 /// encountered
-int spi_nand_block_is_bad(block_address_t block);
+int spi_nand_block_is_bad(block_address_t block, bool *is_bad);
 
 /// @brief Marks a given block as bad
 int spi_nand_block_mark_bad(block_address_t block);
+
+/// @brief Checks if a given page is free
+int spi_nand_page_is_free(block_address_t block, page_address_t page, bool *is_free);
 
 #endif // __SPI_NAND_H

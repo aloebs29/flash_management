@@ -34,6 +34,7 @@ static void command_write_page(int argc, char *argv[]);
 static void command_erase_block(int argc, char *argv[]);
 static void command_get_bad_block_table(int argc, char *argv[]);
 static void command_mark_bad_block(int argc, char *argv[]);
+static void command_page_is_free(int argc, char *argv[]);
 
 static const shell_command_t *find_command(const char *name);
 static void print_bytes(uint8_t *data, size_t len);
@@ -51,7 +52,10 @@ static const shell_command_t shell_commands[] = {
     {"get_bbt", command_get_bad_block_table,
      "Prints a 0 (good) or 1 (bad) representing each block's status.", "get_bbt"},
     {"mark_bb", command_mark_bad_block, "Marks a block of the SPI NAND memory unit as bad.",
-     "mark_bb <block>"}};
+     "mark_bb <block>"},
+    {"page_is_free", command_page_is_free, "Determines whether a page is free.",
+     "page_is_free <block> <page>"},
+};
 
 // private variables
 static uint8_t page_buffer[SPI_NAND_PAGE_SIZE];
@@ -94,8 +98,8 @@ void shell_cmd_process(char *buff, size_t len)
 static void command_help(int argc, char *argv[])
 {
     for (int i = 0; i < NUM_COMMANDS; i++) {
-        shell_printf_line("%-12s%s", shell_commands[i].name, shell_commands[i].description);
-        shell_printf_line("%12cUsage: %s", ' ', shell_commands[i].usage);
+        shell_printf_line("%-14s%s", shell_commands[i].name, shell_commands[i].description);
+        shell_printf_line("%14cUsage: %s", ' ', shell_commands[i].usage);
     }
 }
 
@@ -184,17 +188,15 @@ static void command_get_bad_block_table(int argc, char *argv[])
 {
     // read block status into page buffer
     for (int i = 0; i < SPI_NAND_BLOCKS_PER_LUN; i++) {
-        int ret = spi_nand_block_is_bad(i);
-        if (SPI_NAND_RET_OK == ret) {
-            page_buffer[i] = 0;
-        }
-        else if (SPI_NAND_RET_BAD_BLOCK == ret) {
-            page_buffer[i] = 1;
-        }
-        else {
+        bool is_bad;
+        int ret = spi_nand_block_is_bad(i, &is_bad);
+        if (SPI_NAND_RET_OK != ret) {
             // error occured
             shell_printf_line("Error when checking block %d status: %d.", i, ret);
             return; // exit
+        }
+        else {
+            page_buffer[i] = is_bad;
         }
     }
 
@@ -223,6 +225,37 @@ static void command_mark_bad_block(int argc, char *argv[])
     }
     else {
         shell_printf_line("Mark bad block successful.");
+    }
+}
+
+static void command_page_is_free(int argc, char *argv[])
+{
+    if (argc != 3) {
+        shell_printf_line("page_is_free requires block and page arguments. Type \"help\" "
+                          "for more info.");
+        return;
+    }
+
+    // parse arguments
+    uint16_t block, page;
+    sscanf(argv[1], "%hu", &block);
+    sscanf(argv[2], "%hu", &page);
+
+    // attempt to get is free status..
+    bool is_free;
+    int ret = spi_nand_page_is_free(block, page, &is_free);
+
+    // check for error..
+    if (SPI_NAND_RET_OK != ret) {
+        shell_printf_line("Error when attempting to check if page is free: %d.", ret);
+    }
+    else {
+        if (is_free) {
+            shell_print_line("True.");
+        }
+        else {
+            shell_print_line("False.");
+        }
     }
 }
 

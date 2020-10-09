@@ -135,6 +135,10 @@ static int get_ecc_status(uint32_t timeout);
 
 static int write_enable(uint32_t timeout);
 
+// private variables
+// this buffer is needed for is_free, we don't want to allocate this on the stack
+uint8_t page_main_and_oob_buffer[SPI_NAND_PAGE_SIZE + SPI_NAND_OOB_SIZE];
+
 // public function definitions
 int spi_nand_init(void)
 {
@@ -341,7 +345,7 @@ int spi_nand_block_erase(block_address_t block)
     }
 }
 
-int spi_nand_block_is_bad(block_address_t block)
+int spi_nand_block_is_bad(block_address_t block, bool *is_bad)
 {
     uint8_t bad_block_mark[2];
     // page read will validate the block address
@@ -352,9 +356,13 @@ int spi_nand_block_is_bad(block_address_t block)
 
     // check marker
     if (BAD_BLOCK_MARK == bad_block_mark[0] || BAD_BLOCK_MARK == bad_block_mark[1]) {
-        ret = SPI_NAND_RET_BAD_BLOCK;
+        *is_bad = true;
     }
-    return ret;
+    else {
+        *is_bad = false;
+    }
+
+    return SPI_NAND_RET_OK;
 }
 
 int spi_nand_block_mark_bad(block_address_t block)
@@ -363,6 +371,27 @@ int spi_nand_block_mark_bad(block_address_t block)
     // page program will validate the block address
     return spi_nand_page_program(block, 0, SPI_NAND_PAGE_SIZE, bad_block_mark,
                                  sizeof(bad_block_mark));
+}
+
+int spi_nand_page_is_free(block_address_t block, page_address_t page, bool *is_free)
+{
+    // page read will validate block & page address
+    int ret = spi_nand_page_read(block, page, 0, page_main_and_oob_buffer,
+                                 sizeof(page_main_and_oob_buffer));
+    // exit on error
+    if (SPI_NAND_RET_OK != ret) return ret;
+
+    *is_free = true; // innocent until proven guilty
+    // iterate through page & oob to make sure its 0xff's all the way down
+    uint32_t comp_word = 0xffffffff;
+    for (int i = 0; i < sizeof(page_main_and_oob_buffer); i += sizeof(comp_word)) {
+        if (0 != memcmp(&comp_word, &page_main_and_oob_buffer[i], sizeof(comp_word))) {
+            *is_free = false;
+            break;
+        }
+    }
+
+    return SPI_NAND_RET_OK;
 }
 
 // private function definitions
