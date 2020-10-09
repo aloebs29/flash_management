@@ -128,7 +128,7 @@ static int enable_ecc(void);
 static int set_feature(uint8_t reg, uint8_t data, uint32_t timeout);
 static int get_feature(uint8_t reg, uint8_t *data_out, uint32_t timeout);
 
-static bool validate_row_address(block_address_t block_address, page_address_t page_address);
+static bool validate_row_address(row_address_t row);
 static bool validate_column_address(column_address_t address);
 static int poll_for_oip_clear(feature_reg_status_t *status_out, uint32_t timeout);
 static int get_ecc_status(uint32_t timeout);
@@ -167,11 +167,11 @@ int spi_nand_init(void)
     return ret;
 }
 
-int spi_nand_page_read(block_address_t block, page_address_t page, column_address_t column,
-                       uint8_t *data_out, size_t data_out_len)
+int spi_nand_page_read(row_address_t row, column_address_t column, uint8_t *data_out,
+                       size_t data_out_len)
 {
     // input validation
-    if (!validate_row_address(block, page) || !validate_column_address(column)) {
+    if (!validate_row_address(row) || !validate_column_address(column)) {
         return SPI_NAND_RET_BAD_ADDRESS;
     }
     uint16_t read_len = (SPI_NAND_PAGE_SIZE + SPI_NAND_OOB_SIZE) - column;
@@ -181,12 +181,11 @@ int spi_nand_page_read(block_address_t block, page_address_t page, column_addres
     uint32_t start = sys_time_get_ms();
 
     // setup data for page read command (need to go from LSB -> MSB first on address)
-    uint32_t row_address = ((uint32_t)block << ROW_ADDRESS_BLOCK_SHIFT) + page;
     uint8_t page_read_tx_data[PAGE_READ_TRANS_LEN];
     page_read_tx_data[0] = CMD_PAGE_READ;
-    page_read_tx_data[1] = row_address >> 16;
-    page_read_tx_data[2] = row_address >> 8;
-    page_read_tx_data[3] = row_address;
+    page_read_tx_data[1] = row.whole >> 16;
+    page_read_tx_data[2] = row.whole >> 8;
+    page_read_tx_data[3] = row.whole;
     // perform transaction
     csel_select();
     uint32_t timeout = OP_TIMEOUT - sys_time_get_elapsed(start);
@@ -233,11 +232,11 @@ int spi_nand_page_read(block_address_t block, page_address_t page, column_addres
     }
 }
 
-int spi_nand_page_program(block_address_t block, page_address_t page, column_address_t column,
-                          uint8_t *data_in, size_t data_in_len)
+int spi_nand_page_program(row_address_t row, column_address_t column, uint8_t *data_in,
+                          size_t data_in_len)
 {
     // input validation
-    if (!validate_row_address(block, page) || !validate_column_address(column)) {
+    if (!validate_row_address(row) || !validate_column_address(column)) {
         return SPI_NAND_RET_BAD_ADDRESS;
     }
     uint16_t max_write_len = (SPI_NAND_PAGE_SIZE + SPI_NAND_OOB_SIZE) - column;
@@ -269,12 +268,11 @@ int spi_nand_page_program(block_address_t block, page_address_t page, column_add
     if (SPI_RET_OK != ret) return SPI_NAND_RET_BAD_SPI;
 
     // setup data for program execute (need to go from LSB -> MSB first on address)
-    uint32_t row_address = ((uint32_t)block << ROW_ADDRESS_BLOCK_SHIFT) + page;
     uint8_t program_execute_tx_data[PROGRAM_EXECUTE_TRANS_LEN];
     program_execute_tx_data[0] = CMD_PROGRAM_EXECUTE;
-    program_execute_tx_data[1] = row_address >> 16;
-    program_execute_tx_data[2] = row_address >> 8;
-    program_execute_tx_data[3] = row_address;
+    program_execute_tx_data[1] = row.whole >> 16;
+    program_execute_tx_data[2] = row.whole >> 8;
+    program_execute_tx_data[3] = row.whole;
     // perform transaction
     csel_select();
     timeout = OP_TIMEOUT - sys_time_get_elapsed(start);
@@ -299,10 +297,11 @@ int spi_nand_page_program(block_address_t block, page_address_t page, column_add
     }
 }
 
-int spi_nand_block_erase(block_address_t block)
+int spi_nand_block_erase(row_address_t row)
 {
+    row.page = 0; // make sure page address is zero
     // input validation
-    if (!validate_row_address(block, 0)) {
+    if (!validate_row_address(row)) {
         return SPI_NAND_RET_BAD_ADDRESS;
     }
 
@@ -315,12 +314,11 @@ int spi_nand_block_erase(block_address_t block)
     if (SPI_NAND_RET_OK != ret) return ret;
 
     // setup data for block erase command (need to go from LSB -> MSB first on address)
-    uint32_t row_address = (uint32_t)block << ROW_ADDRESS_BLOCK_SHIFT;
     uint8_t tx_data[BLOCK_ERASE_TRANS_LEN];
     tx_data[0] = CMD_BLOCK_ERASE;
-    tx_data[1] = row_address >> 16;
-    tx_data[2] = row_address >> 8;
-    tx_data[3] = row_address;
+    tx_data[1] = row.whole >> 16;
+    tx_data[2] = row.whole >> 8;
+    tx_data[3] = row.whole;
     // perform transaction
     csel_select();
     uint32_t timeout = OP_TIMEOUT - sys_time_get_elapsed(start);
@@ -345,12 +343,11 @@ int spi_nand_block_erase(block_address_t block)
     }
 }
 
-int spi_nand_block_is_bad(block_address_t block, bool *is_bad)
+int spi_nand_block_is_bad(row_address_t row, bool *is_bad)
 {
     uint8_t bad_block_mark[2];
     // page read will validate the block address
-    int ret =
-        spi_nand_page_read(block, 0, SPI_NAND_PAGE_SIZE, bad_block_mark, sizeof(bad_block_mark));
+    int ret = spi_nand_page_read(row, SPI_NAND_PAGE_SIZE, bad_block_mark, sizeof(bad_block_mark));
     // exit if bad status
     if (SPI_NAND_RET_OK != ret) return ret;
 
@@ -365,19 +362,18 @@ int spi_nand_block_is_bad(block_address_t block, bool *is_bad)
     return SPI_NAND_RET_OK;
 }
 
-int spi_nand_block_mark_bad(block_address_t block)
+int spi_nand_block_mark_bad(row_address_t row)
 {
     uint8_t bad_block_mark[2] = {BAD_BLOCK_MARK, BAD_BLOCK_MARK};
     // page program will validate the block address
-    return spi_nand_page_program(block, 0, SPI_NAND_PAGE_SIZE, bad_block_mark,
-                                 sizeof(bad_block_mark));
+    return spi_nand_page_program(row, SPI_NAND_PAGE_SIZE, bad_block_mark, sizeof(bad_block_mark));
 }
 
-int spi_nand_page_is_free(block_address_t block, page_address_t page, bool *is_free)
+int spi_nand_page_is_free(row_address_t row, bool *is_free)
 {
     // page read will validate block & page address
-    int ret = spi_nand_page_read(block, page, 0, page_main_and_oob_buffer,
-                                 sizeof(page_main_and_oob_buffer));
+    int ret =
+        spi_nand_page_read(row, 0, page_main_and_oob_buffer, sizeof(page_main_and_oob_buffer));
     // exit on error
     if (SPI_NAND_RET_OK != ret) return ret;
 
@@ -514,10 +510,9 @@ static int get_feature(uint8_t reg, uint8_t *data_out, uint32_t timeout)
     }
 }
 
-static bool validate_row_address(block_address_t block_address, page_address_t page_address)
+static bool validate_row_address(row_address_t row)
 {
-    if ((block_address > SPI_NAND_MAX_BLOCK_ADDRESS) ||
-        (page_address > SPI_NAND_MAX_PAGE_ADDRESS)) {
+    if ((row.block > SPI_NAND_MAX_BLOCK_ADDRESS) || (row.page > SPI_NAND_MAX_PAGE_ADDRESS)) {
         return false;
     }
     else {

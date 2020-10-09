@@ -118,7 +118,8 @@ static void command_read_page(int argc, char *argv[])
     sscanf(argv[3], "%hu", &column);
 
     // attempt to read..
-    int ret = spi_nand_page_read(block, page, column, page_buffer, sizeof(page_buffer));
+    row_address_t row = {.block = block, .page = page};
+    int ret = spi_nand_page_read(row, column, page_buffer, sizeof(page_buffer));
 
     // check for error..
     if (SPI_NAND_RET_OK != ret) {
@@ -149,7 +150,8 @@ static void command_write_page(int argc, char *argv[])
     size_t write_len = sizeof(page_buffer) - column;
     memset(page_buffer, value, write_len);
     // attempt to write..
-    int ret = spi_nand_page_program(block, page, column, page_buffer, write_len);
+    row_address_t row = {.block = block, .page = page};
+    int ret = spi_nand_page_program(row, column, page_buffer, write_len);
 
     // check for error..
     if (SPI_NAND_RET_OK != ret) {
@@ -173,7 +175,8 @@ static void command_erase_block(int argc, char *argv[])
     sscanf(argv[1], "%hu", &block);
 
     // attempt to erase..
-    int ret = spi_nand_block_erase(block);
+    row_address_t row = {.block = block, .page = 0};
+    int ret = spi_nand_block_erase(row);
 
     // check for error..
     if (SPI_NAND_RET_OK != ret) {
@@ -189,7 +192,8 @@ static void command_get_bad_block_table(int argc, char *argv[])
     // read block status into page buffer
     for (int i = 0; i < SPI_NAND_BLOCKS_PER_LUN; i++) {
         bool is_bad;
-        int ret = spi_nand_block_is_bad(i, &is_bad);
+        row_address_t row = {.block = i, .page = 0};
+        int ret = spi_nand_block_is_bad(row, &is_bad);
         if (SPI_NAND_RET_OK != ret) {
             // error occured
             shell_printf_line("Error when checking block %d status: %d.", i, ret);
@@ -217,7 +221,8 @@ static void command_mark_bad_block(int argc, char *argv[])
     sscanf(argv[1], "%hu", &block);
 
     // attempt to mark bad block..
-    int ret = spi_nand_block_mark_bad(block);
+    row_address_t row = {.block = block, .page = 0};
+    int ret = spi_nand_block_mark_bad(row);
 
     // check for error..
     if (SPI_NAND_RET_OK != ret) {
@@ -243,7 +248,8 @@ static void command_page_is_free(int argc, char *argv[])
 
     // attempt to get is free status..
     bool is_free;
-    int ret = spi_nand_page_is_free(block, page, &is_free);
+    row_address_t row = {.block = block, .page = page};
+    int ret = spi_nand_page_is_free(row, &is_free);
 
     // check for error..
     if (SPI_NAND_RET_OK != ret) {

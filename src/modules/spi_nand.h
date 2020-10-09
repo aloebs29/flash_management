@@ -36,10 +36,16 @@ enum {
 #define SPI_NAND_MAX_PAGE_ADDRESS  (SPI_NAND_PAGES_PER_BLOCK - 1) // zero-indexed
 #define SPI_NAND_MAX_BLOCK_ADDRESS (SPI_NAND_BLOCKS_PER_LUN - 1)  // zero-indexed
 
-/// @brief Nand block address (valid range 0-1023)
-typedef uint16_t block_address_t;
-/// @brief Nand page address (valid range 0-63)
-typedef uint8_t page_address_t;
+/// @brief Nand row address
+typedef union {
+    uint32_t whole;
+    struct {
+        /// valid range 0-63
+        uint32_t page : 6;
+        /// valid range 0-1023
+        uint32_t block : 26;
+    };
+} row_address_t;
 /// @brief Nand column address (valid range 0-2175)
 typedef uint16_t column_address_t;
 
@@ -47,25 +53,28 @@ typedef uint16_t column_address_t;
 int spi_nand_init(void);
 
 /// @brief Performs a read page operation
-int spi_nand_page_read(block_address_t block, page_address_t page, column_address_t column,
-                       uint8_t *data_out, size_t data_out_len);
+int spi_nand_page_read(row_address_t row, column_address_t column, uint8_t *data_out,
+                       size_t data_out_len);
 
 /// @brief Performs a page program operation
-int spi_nand_page_program(block_address_t block, page_address_t page, column_address_t column,
-                          uint8_t *data_in, size_t data_in_len);
+int spi_nand_page_program(row_address_t row, column_address_t column, uint8_t *data_in,
+                          size_t data_in_len);
 
 /// @brief Performs a block erase operation
-int spi_nand_block_erase(block_address_t block);
+/// @note Block operation -- page component of row address is ignored
+int spi_nand_block_erase(row_address_t row);
 
 /// @brief Checks if a given block is bad
+/// @note Block operation -- page component of row address is ignored
 /// @return SPI_NAND_RET_OK if good block, SPI_NAND_RET_BAD_BLOCK if bad, other returns if error is
 /// encountered
-int spi_nand_block_is_bad(block_address_t block, bool *is_bad);
+int spi_nand_block_is_bad(row_address_t row, bool *is_bad);
 
 /// @brief Marks a given block as bad
-int spi_nand_block_mark_bad(block_address_t block);
+/// @note Block operation -- page component of row address is ignored
+int spi_nand_block_mark_bad(row_address_t row);
 
 /// @brief Checks if a given page is free
-int spi_nand_page_is_free(block_address_t block, page_address_t page, bool *is_free);
+int spi_nand_page_is_free(row_address_t row, bool *is_free);
 
 #endif // __SPI_NAND_H
