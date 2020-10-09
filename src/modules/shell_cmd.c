@@ -32,6 +32,8 @@ static void command_help(int argc, char *argv[]);
 static void command_read_page(int argc, char *argv[]);
 static void command_write_page(int argc, char *argv[]);
 static void command_erase_block(int argc, char *argv[]);
+static void command_get_bad_block_table(int argc, char *argv[]);
+static void command_mark_bad_block(int argc, char *argv[]);
 
 static const shell_command_t *find_command(const char *name);
 static void print_bytes(uint8_t *data, size_t len);
@@ -46,7 +48,10 @@ static const shell_command_t shell_commands[] = {
      "write_page <block> <page> <column> <value>"},
     {"erase_block", command_erase_block, "Erases a block of the SPI NAND memory unit.",
      "erase_block <block>"},
-};
+    {"get_bbt", command_get_bad_block_table,
+     "Prints a 0 (good) or 1 (bad) representing each block's status.", "get_bbt"},
+    {"mark_bb", command_mark_bad_block, "Marks a block of the SPI NAND memory unit as bad.",
+     "mark_bb <block>"}};
 
 // private variables
 static uint8_t page_buffer[SPI_NAND_PAGE_SIZE];
@@ -172,6 +177,52 @@ static void command_erase_block(int argc, char *argv[])
     }
     else {
         shell_printf_line("Block erase successful.");
+    }
+}
+
+static void command_get_bad_block_table(int argc, char *argv[])
+{
+    // read block status into page buffer
+    for (int i = 0; i < SPI_NAND_BLOCKS_PER_LUN; i++) {
+        int ret = spi_nand_block_is_bad(i);
+        if (SPI_NAND_RET_OK == ret) {
+            page_buffer[i] = 0;
+        }
+        else if (SPI_NAND_RET_BAD_BLOCK == ret) {
+            page_buffer[i] = 1;
+        }
+        else {
+            // error occured
+            shell_printf_line("Error when checking block %d status: %d.", i, ret);
+            return; // exit
+        }
+    }
+
+    // print bad block table
+    print_bytes(page_buffer, SPI_NAND_BLOCKS_PER_LUN);
+}
+
+static void command_mark_bad_block(int argc, char *argv[])
+{
+    if (argc != 2) {
+        shell_printf_line("mark_bb requires a block number as an argument. Type \"help\" "
+                          "for more info.");
+        return;
+    }
+
+    // parse arguments
+    uint16_t block;
+    sscanf(argv[1], "%hu", &block);
+
+    // attempt to mark bad block..
+    int ret = spi_nand_block_mark_bad(block);
+
+    // check for error..
+    if (SPI_NAND_RET_OK != ret) {
+        shell_printf_line("Error when attempting to mark bad block: %d.", ret);
+    }
+    else {
+        shell_printf_line("Mark bad block successful.");
     }
 }
 

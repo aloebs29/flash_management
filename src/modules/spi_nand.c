@@ -64,6 +64,8 @@
 
 #define ROW_ADDRESS_BLOCK_SHIFT 6
 
+#define BAD_BLOCK_MARK 0
+
 // private types
 typedef union {
     uint8_t whole;
@@ -337,6 +339,30 @@ int spi_nand_block_erase(block_address_t block)
     else {
         return SPI_NAND_RET_OK;
     }
+}
+
+int spi_nand_block_is_bad(block_address_t block)
+{
+    uint8_t bad_block_mark[2];
+    // page read will validate the block address
+    int ret =
+        spi_nand_page_read(block, 0, SPI_NAND_PAGE_SIZE, bad_block_mark, sizeof(bad_block_mark));
+    // exit if bad status
+    if (SPI_NAND_RET_OK != ret) return ret;
+
+    // check marker
+    if (BAD_BLOCK_MARK == bad_block_mark[0] || BAD_BLOCK_MARK == bad_block_mark[1]) {
+        ret = SPI_NAND_RET_BAD_BLOCK;
+    }
+    return ret;
+}
+
+int spi_nand_block_mark_bad(block_address_t block)
+{
+    uint8_t bad_block_mark[2] = {BAD_BLOCK_MARK, BAD_BLOCK_MARK};
+    // page program will validate the block address
+    return spi_nand_page_program(block, 0, SPI_NAND_PAGE_SIZE, bad_block_mark,
+                                 sizeof(bad_block_mark));
 }
 
 // private function definitions

@@ -25,12 +25,16 @@ enum {
     SPI_NAND_RET_ECC_ERR = -7,
     SPI_NAND_RET_P_FAIL = -8,
     SPI_NAND_RET_E_FAIL = -9,
+    SPI_NAND_RET_BAD_BLOCK = -10,
 };
 
-#define SPI_NAND_MAX_BLOCK_ADDRESS 1023
-#define SPI_NAND_MAX_PAGE_ADDRESS  63
-#define SPI_NAND_PAGE_SIZE         2048
-#define SPI_NAND_OOB_SIZE          64
+#define SPI_NAND_PAGE_SIZE       2048
+#define SPI_NAND_OOB_SIZE        64
+#define SPI_NAND_PAGES_PER_BLOCK 64
+#define SPI_NAND_BLOCKS_PER_LUN  1024
+
+#define SPI_NAND_MAX_PAGE_ADDRESS  (SPI_NAND_PAGES_PER_BLOCK - 1) // zero-indexed
+#define SPI_NAND_MAX_BLOCK_ADDRESS (SPI_NAND_BLOCKS_PER_LUN - 1)  // zero-indexed
 
 /// @brief Nand block address (valid range 0-1023)
 typedef uint16_t block_address_t;
@@ -52,5 +56,13 @@ int spi_nand_page_program(block_address_t block, page_address_t page, column_add
 
 /// @brief Performs a block erase operation
 int spi_nand_block_erase(block_address_t block);
+
+/// @brief Checks if a given block is bad
+/// @return SPI_NAND_RET_OK if good block, SPI_NAND_RET_BAD_BLOCK if bad, other returns if error is
+/// encountered
+int spi_nand_block_is_bad(block_address_t block);
+
+/// @brief Marks a given block as bad
+int spi_nand_block_mark_bad(block_address_t block);
 
 #endif // __SPI_NAND_H

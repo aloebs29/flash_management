@@ -71,7 +71,6 @@ CFLAGS += \
 LDFLAGS += \
 	-T src/stm32l432kc.ld \
 	-static \
-	-u \
 	-lc \
 	-lm \
 	-Wl,--start-group \
