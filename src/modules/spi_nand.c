@@ -122,18 +122,24 @@ static void csel_select(void);
 
 static int reset(void);
 static int read_id(void);
-static int unlock_all_blocks(void);
-static int enable_ecc(void);
-
 static int set_feature(uint8_t reg, uint8_t data, uint32_t timeout);
 static int get_feature(uint8_t reg, uint8_t *data_out, uint32_t timeout);
+static int write_enable(uint32_t timeout);
+static int page_read(row_address_t row, uint32_t timeout);
+static int read_from_cache(column_address_t column, uint8_t *data_out, size_t read_len,
+                           uint32_t timeout);
+static int program_load(column_address_t column, uint8_t *data_in, size_t write_len,
+                        uint32_t timeout);
+static int program_execute(row_address_t row, uint32_t timeout);
+static int block_erase(row_address_t row, uint32_t timeout);
+
+static int unlock_all_blocks(void);
+static int enable_ecc(void);
+static int poll_for_oip_clear(feature_reg_status_t *status_out, uint32_t timeout);
 
 static bool validate_row_address(row_address_t row);
 static bool validate_column_address(column_address_t address);
-static int poll_for_oip_clear(feature_reg_status_t *status_out, uint32_t timeout);
-static int get_ecc_status(uint32_t timeout);
-
-static int write_enable(uint32_t timeout);
+static int get_ret_from_ecc_status(feature_reg_status_t status);
 
 // private variables
 // this buffer is needed for is_free, we don't want to allocate this on the stack
@@ -168,79 +174,37 @@ int spi_nand_init(void)
 }
 
 int spi_nand_page_read(row_address_t row, column_address_t column, uint8_t *data_out,
-                       size_t data_out_len)
+                       size_t read_len)
 {
     // input validation
     if (!validate_row_address(row) || !validate_column_address(column)) {
         return SPI_NAND_RET_BAD_ADDRESS;
     }
-    uint16_t read_len = (SPI_NAND_PAGE_SIZE + SPI_NAND_OOB_SIZE) - column;
-    if (data_out_len < read_len) read_len = data_out_len; // truncate to the caller's buffer size
+    uint16_t max_read_len = (SPI_NAND_PAGE_SIZE + SPI_NAND_OOB_SIZE) - column;
+    if (read_len > max_read_len) return SPI_NAND_RET_INVALID_LEN;
 
     // setup timeout tracking
     uint32_t start = sys_time_get_ms();
 
-    // setup data for page read command (need to go from LSB -> MSB first on address)
-    uint8_t page_read_tx_data[PAGE_READ_TRANS_LEN];
-    page_read_tx_data[0] = CMD_PAGE_READ;
-    page_read_tx_data[1] = row.whole >> 16;
-    page_read_tx_data[2] = row.whole >> 8;
-    page_read_tx_data[3] = row.whole;
-    // perform transaction
-    csel_select();
+    // read page into flash's internal cache
+    int ret = page_read(row, OP_TIMEOUT);
+    // exit on bad status
+    if (SPI_NAND_RET_OK != ret) return ret;
+
+    // read from cache
     uint32_t timeout = OP_TIMEOUT - sys_time_get_elapsed(start);
-    int ret = spi_write(page_read_tx_data, PAGE_READ_TRANS_LEN, timeout);
-    csel_deselect();
-    // exit if bad status
-    if (SPI_RET_OK != ret) return SPI_NAND_RET_BAD_SPI;
-
-    // wait until that operation finishes
-    feature_reg_status_t status;
-    timeout = OP_TIMEOUT - sys_time_get_elapsed(start);
-    ret = poll_for_oip_clear(&status, timeout);
-    // exit if bad status
-    if (SPI_RET_OK != ret) return ret;
-
-    // check ecc
-    timeout = OP_TIMEOUT - sys_time_get_elapsed(start);
-    int ecc_status_ret = get_ecc_status(timeout);
-
-    // setup data for page read command (need to go from LSB -> MSB first on address)
-    uint8_t read_from_cache_tx_data[READ_FROM_CACHE_TRANS_LEN];
-    read_from_cache_tx_data[0] = CMD_READ_FROM_CACHE;
-    read_from_cache_tx_data[1] = column >> 8;
-    read_from_cache_tx_data[2] = column;
-    read_from_cache_tx_data[3] = 0;
-    // perform transaction
-    csel_select();
-    timeout = OP_TIMEOUT - sys_time_get_elapsed(start);
-    ret = spi_write(read_from_cache_tx_data, READ_FROM_CACHE_TRANS_LEN, timeout);
-    if (SPI_RET_OK == ret) {
-        timeout = OP_TIMEOUT - sys_time_get_elapsed(start);
-        ret = spi_read(data_out, read_len, timeout);
-    }
-    csel_deselect();
-
-    /* Determine return status. We've accumulated the ecc status, and spi status from both the
-     * write and read op. Preference will be given to return bad SPI statuses so that the caller is
-     * aware that the return data is bad. */
-    if (SPI_RET_OK != ret) {
-        return ret;
-    }
-    else {
-        return ecc_status_ret;
-    }
+    return read_from_cache(column, data_out, read_len, timeout);
 }
 
 int spi_nand_page_program(row_address_t row, column_address_t column, uint8_t *data_in,
-                          size_t data_in_len)
+                          size_t write_len)
 {
     // input validation
     if (!validate_row_address(row) || !validate_column_address(column)) {
         return SPI_NAND_RET_BAD_ADDRESS;
     }
     uint16_t max_write_len = (SPI_NAND_PAGE_SIZE + SPI_NAND_OOB_SIZE) - column;
-    if (data_in_len > max_write_len) return SPI_NAND_RET_BUFFER_LEN;
+    if (write_len > max_write_len) return SPI_NAND_RET_INVALID_LEN;
 
     // setup timeout tracking
     uint32_t start = sys_time_get_ms();
@@ -250,51 +214,15 @@ int spi_nand_page_program(row_address_t row, column_address_t column, uint8_t *d
     // exit if bad status
     if (SPI_NAND_RET_OK != ret) return ret;
 
-    // setup data for program load (need to go from LSB -> MSB first on address)
-    uint8_t program_load_tx_data[PROGRAM_LOAD_TRANS_LEN];
-    program_load_tx_data[0] = CMD_PROGRAM_LOAD;
-    program_load_tx_data[1] = column >> 8;
-    program_load_tx_data[2] = column;
-    // perform transaction
-    csel_select();
+    // load data into nand's internal cache
     uint32_t timeout = OP_TIMEOUT - sys_time_get_elapsed(start);
-    ret = spi_write(program_load_tx_data, PROGRAM_LOAD_TRANS_LEN, timeout);
-    if (SPI_RET_OK == ret) {
-        timeout = OP_TIMEOUT - sys_time_get_elapsed(start);
-        ret = spi_write(data_in, data_in_len, timeout);
-    }
-    csel_deselect();
-    // exit if bad status
-    if (SPI_RET_OK != ret) return SPI_NAND_RET_BAD_SPI;
+    ret = program_load(column, data_in, write_len, timeout);
+    // exit on bad status
+    if (SPI_NAND_RET_OK != ret) return ret;
 
-    // setup data for program execute (need to go from LSB -> MSB first on address)
-    uint8_t program_execute_tx_data[PROGRAM_EXECUTE_TRANS_LEN];
-    program_execute_tx_data[0] = CMD_PROGRAM_EXECUTE;
-    program_execute_tx_data[1] = row.whole >> 16;
-    program_execute_tx_data[2] = row.whole >> 8;
-    program_execute_tx_data[3] = row.whole;
-    // perform transaction
-    csel_select();
+    // write to cell array from nand's internal cache
     timeout = OP_TIMEOUT - sys_time_get_elapsed(start);
-    ret = spi_write(program_execute_tx_data, PAGE_READ_TRANS_LEN, timeout);
-    csel_deselect();
-    // exit if bad status
-    if (SPI_RET_OK != ret) return SPI_NAND_RET_BAD_SPI;
-
-    // wait until that operation finishes
-    feature_reg_status_t status;
-    timeout = OP_TIMEOUT - sys_time_get_elapsed(start);
-    ret = poll_for_oip_clear(&status, timeout);
-
-    if (SPI_RET_OK != ret) { // if polling failed, return that status
-        return ret;
-    }
-    else if (status.P_FAIL) { // otherwise, check for P_FAIL
-        return SPI_NAND_RET_P_FAIL;
-    }
-    else {
-        return SPI_NAND_RET_OK;
-    }
+    return program_execute(row, timeout);
 }
 
 int spi_nand_block_erase(row_address_t row)
@@ -313,34 +241,9 @@ int spi_nand_block_erase(row_address_t row)
     // exit if bad status
     if (SPI_NAND_RET_OK != ret) return ret;
 
-    // setup data for block erase command (need to go from LSB -> MSB first on address)
-    uint8_t tx_data[BLOCK_ERASE_TRANS_LEN];
-    tx_data[0] = CMD_BLOCK_ERASE;
-    tx_data[1] = row.whole >> 16;
-    tx_data[2] = row.whole >> 8;
-    tx_data[3] = row.whole;
-    // perform transaction
-    csel_select();
+    // block erase
     uint32_t timeout = OP_TIMEOUT - sys_time_get_elapsed(start);
-    ret = spi_write(tx_data, BLOCK_ERASE_TRANS_LEN, timeout);
-    csel_deselect();
-    // exit if bad status
-    if (SPI_RET_OK != ret) return SPI_NAND_RET_BAD_SPI;
-
-    // wait until that operation finishes
-    feature_reg_status_t status;
-    timeout = OP_TIMEOUT - sys_time_get_elapsed(start);
-    ret = poll_for_oip_clear(&status, timeout);
-
-    if (SPI_RET_OK != ret) { // if polling failed, return that status
-        return ret;
-    }
-    else if (status.E_FAIL) { // otherwise, check for E_FAIL
-        return SPI_NAND_RET_E_FAIL;
-    }
-    else {
-        return SPI_NAND_RET_OK;
-    }
+    return block_erase(row, timeout);
 }
 
 int spi_nand_block_is_bad(row_address_t row, bool *is_bad)
@@ -459,19 +362,6 @@ static int read_id(void)
     }
 }
 
-static int unlock_all_blocks(void)
-{
-    feature_reg_block_lock_t unlock_all = {.whole = 0};
-    return set_feature(FEATURE_REG_BLOCK_LOCK, unlock_all.whole, OP_TIMEOUT);
-}
-
-static int enable_ecc(void)
-{
-    feature_reg_configuration_t ecc_enable = {.whole = 0}; // we want to zero the other bits here
-    ecc_enable.ECC_EN = 1;
-    return set_feature(FEATURE_REG_CONFIGURATION, ecc_enable.whole, OP_TIMEOUT);
-}
-
 static int set_feature(uint8_t reg, uint8_t data, uint32_t timeout)
 {
     // setup data
@@ -510,24 +400,188 @@ static int get_feature(uint8_t reg, uint8_t *data_out, uint32_t timeout)
     }
 }
 
-static bool validate_row_address(row_address_t row)
+static int write_enable(uint32_t timeout)
 {
-    if ((row.block > SPI_NAND_MAX_BLOCK_ADDRESS) || (row.page > SPI_NAND_MAX_PAGE_ADDRESS)) {
-        return false;
+    // setup data
+    uint8_t cmd = CMD_WRITE_ENABLE;
+    // perform transaction
+    csel_select();
+    int ret = spi_write(&cmd, sizeof(cmd), timeout);
+    csel_deselect();
+
+    // map spi return to spi nand return
+    return (SPI_RET_OK == ret) ? SPI_NAND_RET_OK : SPI_NAND_RET_BAD_SPI;
+}
+
+/// @note Input validation is expected to be performed by caller.
+static int page_read(row_address_t row, uint32_t timeout)
+{
+    // setup timeout tracking for second operation
+    uint32_t start = sys_time_get_ms();
+
+    // setup data for page read command (need to go from LSB -> MSB first on address)
+    uint8_t tx_data[PAGE_READ_TRANS_LEN];
+    tx_data[0] = CMD_PAGE_READ;
+    tx_data[1] = row.whole >> 16;
+    tx_data[2] = row.whole >> 8;
+    tx_data[3] = row.whole;
+    // perform transaction
+    csel_select();
+    int ret = spi_write(tx_data, PAGE_READ_TRANS_LEN, timeout);
+    csel_deselect();
+    // exit if bad status
+    if (SPI_RET_OK != ret) return SPI_NAND_RET_BAD_SPI;
+
+    // wait until that operation finishes
+    feature_reg_status_t status;
+    timeout -= sys_time_get_elapsed(start);
+    ret = poll_for_oip_clear(&status, timeout);
+    // exit if bad status
+    if (SPI_RET_OK != ret) return ret;
+
+    // check ecc
+    return get_ret_from_ecc_status(status);
+}
+
+/// @note Input validation is expected to be performed by caller.
+static int read_from_cache(column_address_t column, uint8_t *data_out, size_t read_len,
+                           uint32_t timeout)
+{
+    // setup timeout tracking for second operation
+    uint32_t start = sys_time_get_ms();
+
+    // setup data for read from cache command (need to go from LSB -> MSB first on address)
+    uint8_t tx_data[READ_FROM_CACHE_TRANS_LEN];
+    tx_data[0] = CMD_READ_FROM_CACHE;
+    tx_data[1] = column >> 8;
+    tx_data[2] = column;
+    tx_data[3] = 0;
+    // perform transaction
+    csel_select();
+    int ret = spi_write(tx_data, READ_FROM_CACHE_TRANS_LEN, timeout);
+    if (SPI_RET_OK == ret) {
+        timeout -= sys_time_get_elapsed(start);
+        ret = spi_read(data_out, read_len, timeout);
+    }
+    csel_deselect();
+
+    if (SPI_RET_OK != ret) {
+        return SPI_NAND_RET_BAD_SPI;
     }
     else {
-        return true;
+        return SPI_NAND_RET_OK;
     }
 }
 
-static bool validate_column_address(column_address_t address)
+/// @note Input validation is expected to be performed by caller.
+static int program_load(column_address_t column, uint8_t *data_in, size_t write_len,
+                        uint32_t timeout)
 {
-    if (address >= (SPI_NAND_PAGE_SIZE + SPI_NAND_OOB_SIZE)) {
-        return false;
+    // setup timeout tracking for second operation
+    uint32_t start = sys_time_get_ms();
+
+    // setup data for program load (need to go from LSB -> MSB first on address)
+    uint8_t tx_data[PROGRAM_LOAD_TRANS_LEN];
+    tx_data[0] = CMD_PROGRAM_LOAD;
+    tx_data[1] = column >> 8;
+    tx_data[2] = column;
+    // perform transaction
+    csel_select();
+    int ret = spi_write(tx_data, PROGRAM_LOAD_TRANS_LEN, timeout);
+    if (SPI_RET_OK == ret) {
+        timeout -= sys_time_get_elapsed(start);
+        ret = spi_write(data_in, write_len, timeout);
+    }
+    csel_deselect();
+
+    if (SPI_RET_OK != ret) {
+        return SPI_NAND_RET_BAD_SPI;
     }
     else {
-        return true;
+        return SPI_NAND_RET_OK;
     }
+}
+
+/// @note Input validation is expected to be performed by caller.
+static int program_execute(row_address_t row, uint32_t timeout)
+{
+    // setup timeout tracking for second operation
+    uint32_t start = sys_time_get_ms();
+
+    // setup data for program execute (need to go from LSB -> MSB first on address)
+    uint8_t tx_data[PROGRAM_EXECUTE_TRANS_LEN];
+    tx_data[0] = CMD_PROGRAM_EXECUTE;
+    tx_data[1] = row.whole >> 16;
+    tx_data[2] = row.whole >> 8;
+    tx_data[3] = row.whole;
+    // perform transaction
+    csel_select();
+    int ret = spi_write(tx_data, PAGE_READ_TRANS_LEN, timeout);
+    csel_deselect();
+    // exit if bad status
+    if (SPI_RET_OK != ret) return SPI_NAND_RET_BAD_SPI;
+
+    // wait until that operation finishes
+    feature_reg_status_t status;
+    timeout -= sys_time_get_elapsed(start);
+    ret = poll_for_oip_clear(&status, timeout);
+
+    if (SPI_NAND_RET_OK != ret) { // if polling failed, return that status
+        return ret;
+    }
+    else if (status.P_FAIL) { // otherwise, check for P_FAIL
+        return SPI_NAND_RET_P_FAIL;
+    }
+    else {
+        return SPI_NAND_RET_OK;
+    }
+}
+
+static int block_erase(row_address_t row, uint32_t timeout)
+{
+    // setup timeout tracking for second operation
+    uint32_t start = sys_time_get_ms();
+
+    // setup data for block erase command (need to go from LSB -> MSB first on address)
+    uint8_t tx_data[BLOCK_ERASE_TRANS_LEN];
+    tx_data[0] = CMD_BLOCK_ERASE;
+    tx_data[1] = row.whole >> 16;
+    tx_data[2] = row.whole >> 8;
+    tx_data[3] = row.whole;
+    // perform transaction
+    csel_select();
+    int ret = spi_write(tx_data, BLOCK_ERASE_TRANS_LEN, timeout);
+    csel_deselect();
+    // exit if bad status
+    if (SPI_RET_OK != ret) return SPI_NAND_RET_BAD_SPI;
+
+    // wait until that operation finishes
+    feature_reg_status_t status;
+    timeout -= sys_time_get_elapsed(start);
+    ret = poll_for_oip_clear(&status, timeout);
+
+    if (SPI_NAND_RET_OK != ret) { // if polling failed, return that status
+        return ret;
+    }
+    else if (status.E_FAIL) { // otherwise, check for E_FAIL
+        return SPI_NAND_RET_E_FAIL;
+    }
+    else {
+        return SPI_NAND_RET_OK;
+    }
+}
+
+static int unlock_all_blocks(void)
+{
+    feature_reg_block_lock_t unlock_all = {.whole = 0};
+    return set_feature(FEATURE_REG_BLOCK_LOCK, unlock_all.whole, OP_TIMEOUT);
+}
+
+static int enable_ecc(void)
+{
+    feature_reg_configuration_t ecc_enable = {.whole = 0}; // we want to zero the other bits here
+    ecc_enable.ECC_EN = 1;
+    return set_feature(FEATURE_REG_CONFIGURATION, ecc_enable.whole, OP_TIMEOUT);
 }
 
 static int poll_for_oip_clear(feature_reg_status_t *status_out, uint32_t timeout)
@@ -551,13 +605,29 @@ static int poll_for_oip_clear(feature_reg_status_t *status_out, uint32_t timeout
     }
 }
 
-static int get_ecc_status(uint32_t timeout)
+static bool validate_row_address(row_address_t row)
 {
-    feature_reg_status_t status = {.whole = 0};
-    // get status reg
-    int ret = get_feature(FEATURE_REG_STATUS, &status.whole, timeout);
-    // exit on error
-    if (SPI_NAND_RET_OK != ret) return ret;
+    if ((row.block > SPI_NAND_MAX_BLOCK_ADDRESS) || (row.page > SPI_NAND_MAX_PAGE_ADDRESS)) {
+        return false;
+    }
+    else {
+        return true;
+    }
+}
+
+static bool validate_column_address(column_address_t address)
+{
+    if (address >= (SPI_NAND_PAGE_SIZE + SPI_NAND_OOB_SIZE)) {
+        return false;
+    }
+    else {
+        return true;
+    }
+}
+
+static int get_ret_from_ecc_status(feature_reg_status_t status)
+{
+    int ret;
 
     // map ECC status to return type
     switch (status.ECCS0_3) {
@@ -576,17 +646,4 @@ static int get_ecc_status(uint32_t timeout)
     }
 
     return ret;
-}
-
-static int write_enable(uint32_t timeout)
-{
-    // setup data
-    uint8_t cmd = CMD_WRITE_ENABLE;
-    // perform transaction
-    csel_select();
-    int ret = spi_write(&cmd, sizeof(cmd), timeout);
-    csel_deselect();
-
-    // map spi return to spi nand return
-    return (SPI_RET_OK == ret) ? SPI_NAND_RET_OK : SPI_NAND_RET_BAD_SPI;
 }

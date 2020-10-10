@@ -21,7 +21,7 @@ enum {
     SPI_NAND_RET_TIMEOUT = -2,
     SPI_NAND_RET_DEVICE_ID = -3,
     SPI_NAND_RET_BAD_ADDRESS = -4,
-    SPI_NAND_RET_BUFFER_LEN = -5,
+    SPI_NAND_RET_INVALID_LEN = -5,
     SPI_NAND_RET_ECC_REFRESH = -6,
     SPI_NAND_RET_ECC_ERR = -7,
     SPI_NAND_RET_P_FAIL = -8,
@@ -54,11 +54,11 @@ int spi_nand_init(void);
 
 /// @brief Performs a read page operation
 int spi_nand_page_read(row_address_t row, column_address_t column, uint8_t *data_out,
-                       size_t data_out_len);
+                       size_t read_len);
 
 /// @brief Performs a page program operation
 int spi_nand_page_program(row_address_t row, column_address_t column, uint8_t *data_in,
-                          size_t data_in_len);
+                          size_t write_len);
 
 /// @brief Performs a block erase operation
 /// @note Block operation -- page component of row address is ignored
