@@ -24,16 +24,17 @@
 #define RESET_DELAY 2    // ms
 #define OP_TIMEOUT  3000 // ms
 
-#define CMD_RESET           0xFF
-#define CMD_READ_ID         0x9F
-#define CMD_SET_FEATURE     0x1F
-#define CMD_GET_FEATURE     0x0F
-#define CMD_PAGE_READ       0x13
-#define CMD_READ_FROM_CACHE 0x03
-#define CMD_WRITE_ENABLE    0x06
-#define CMD_PROGRAM_LOAD    0x02
-#define CMD_PROGRAM_EXECUTE 0x10
-#define CMD_BLOCK_ERASE     0xD8
+#define CMD_RESET                    0xFF
+#define CMD_READ_ID                  0x9F
+#define CMD_SET_FEATURE              0x1F
+#define CMD_GET_FEATURE              0x0F
+#define CMD_PAGE_READ                0x13
+#define CMD_READ_FROM_CACHE          0x03
+#define CMD_WRITE_ENABLE             0x06
+#define CMD_PROGRAM_LOAD             0x02
+#define CMD_PROGRAM_LOAD_RANDOM_DATA 0x84
+#define CMD_PROGRAM_EXECUTE          0x10
+#define CMD_BLOCK_ERASE              0xD8
 
 #define READ_ID_TRANS_LEN    4
 #define READ_ID_MFR_INDEX    2
@@ -45,11 +46,12 @@
 #define FEATURE_REG_INDEX  1
 #define FEATURE_DATA_INDEX 2
 
-#define PAGE_READ_TRANS_LEN       4
-#define READ_FROM_CACHE_TRANS_LEN 4
-#define PROGRAM_LOAD_TRANS_LEN    3
-#define PROGRAM_EXECUTE_TRANS_LEN 4
-#define BLOCK_ERASE_TRANS_LEN     4
+#define PAGE_READ_TRANS_LEN                4
+#define READ_FROM_CACHE_TRANS_LEN          4
+#define PROGRAM_LOAD_TRANS_LEN             3
+#define PROGRAM_LOAD_RANDOM_DATA_TRANS_LEN 3
+#define PROGRAM_EXECUTE_TRANS_LEN          4
+#define BLOCK_ERASE_TRANS_LEN              4
 
 #define FEATURE_REG_STATUS        0xC0
 #define FEATURE_REG_BLOCK_LOCK    0xA0
@@ -130,6 +132,8 @@ static int read_from_cache(column_address_t column, uint8_t *data_out, size_t re
                            uint32_t timeout);
 static int program_load(column_address_t column, uint8_t *data_in, size_t write_len,
                         uint32_t timeout);
+static int program_load_random_data(column_address_t column, uint8_t *data_in, size_t write_len,
+                                    uint32_t timeout);
 static int program_execute(row_address_t row, uint32_t timeout);
 static int block_erase(row_address_t row, uint32_t timeout);
 
@@ -210,7 +214,7 @@ int spi_nand_page_program(row_address_t row, column_address_t column, uint8_t *d
     uint32_t start = sys_time_get_ms();
 
     // write enable
-    int ret = write_enable(OP_TIMEOUT); // ignore the time elapsed since start since its negligible
+    int ret = write_enable(OP_TIMEOUT);
     // exit if bad status
     if (SPI_NAND_RET_OK != ret) return ret;
 
@@ -223,6 +227,39 @@ int spi_nand_page_program(row_address_t row, column_address_t column, uint8_t *d
     // write to cell array from nand's internal cache
     timeout = OP_TIMEOUT - sys_time_get_elapsed(start);
     return program_execute(row, timeout);
+}
+
+int spi_nand_page_copy(row_address_t src, row_address_t dest)
+{
+    // input validation
+    if (!validate_row_address(src) || !validate_row_address(src)) {
+        return SPI_NAND_RET_BAD_ADDRESS;
+    }
+
+    // setup timeout tracking
+    uint32_t start = sys_time_get_ms();
+
+    // read page into flash's internal cache
+    int ret = page_read(src, OP_TIMEOUT);
+    // exit on bad status
+    if (SPI_NAND_RET_OK != ret) return ret;
+
+    // write enable
+    uint32_t timeout = OP_TIMEOUT - sys_time_get_elapsed(start);
+    ret = write_enable(timeout);
+    // exit if bad status
+    if (SPI_NAND_RET_OK != ret) return ret;
+
+    // empty program load random data
+    timeout = OP_TIMEOUT - sys_time_get_elapsed(start);
+    uint8_t dummy_byte = 0; // avoid a null pointer
+    ret = program_load_random_data(0, &dummy_byte, 0, timeout);
+    // exit on bad status
+    if (SPI_NAND_RET_OK != ret) return ret;
+
+    // write to cell array from nand's internal cache
+    timeout = OP_TIMEOUT - sys_time_get_elapsed(start);
+    return program_execute(dest, timeout);
 }
 
 int spi_nand_block_erase(row_address_t row)
@@ -483,6 +520,34 @@ static int program_load(column_address_t column, uint8_t *data_in, size_t write_
     // setup data for program load (need to go from LSB -> MSB first on address)
     uint8_t tx_data[PROGRAM_LOAD_TRANS_LEN];
     tx_data[0] = CMD_PROGRAM_LOAD;
+    tx_data[1] = column >> 8;
+    tx_data[2] = column;
+    // perform transaction
+    csel_select();
+    int ret = spi_write(tx_data, PROGRAM_LOAD_TRANS_LEN, timeout);
+    if (SPI_RET_OK == ret) {
+        timeout -= sys_time_get_elapsed(start);
+        ret = spi_write(data_in, write_len, timeout);
+    }
+    csel_deselect();
+
+    if (SPI_RET_OK != ret) {
+        return SPI_NAND_RET_BAD_SPI;
+    }
+    else {
+        return SPI_NAND_RET_OK;
+    }
+}
+
+static int program_load_random_data(column_address_t column, uint8_t *data_in, size_t write_len,
+                                    uint32_t timeout)
+{
+    // setup timeout tracking for second operation
+    uint32_t start = sys_time_get_ms();
+
+    // setup data for program load (need to go from LSB -> MSB first on address)
+    uint8_t tx_data[PROGRAM_LOAD_RANDOM_DATA_TRANS_LEN];
+    tx_data[0] = CMD_PROGRAM_LOAD_RANDOM_DATA;
     tx_data[1] = column >> 8;
     tx_data[2] = column;
     // perform transaction

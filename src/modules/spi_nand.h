@@ -60,6 +60,9 @@ int spi_nand_page_read(row_address_t row, column_address_t column, uint8_t *data
 int spi_nand_page_program(row_address_t row, column_address_t column, uint8_t *data_in,
                           size_t write_len);
 
+/// @brief Copies the source page to the destination page using nand's internal cache
+int spi_nand_page_copy(row_address_t src, row_address_t dest);
+
 /// @brief Performs a block erase operation
 /// @note Block operation -- page component of row address is ignored
 int spi_nand_block_erase(row_address_t row);

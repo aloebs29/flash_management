@@ -35,6 +35,7 @@ static void command_erase_block(int argc, char *argv[]);
 static void command_get_bad_block_table(int argc, char *argv[]);
 static void command_mark_bad_block(int argc, char *argv[]);
 static void command_page_is_free(int argc, char *argv[]);
+static void command_copy_page(int argc, char *argv[]);
 
 static const shell_command_t *find_command(const char *name);
 static void print_bytes(uint8_t *data, size_t len);
@@ -55,6 +56,8 @@ static const shell_command_t shell_commands[] = {
      "mark_bb <block>"},
     {"page_is_free", command_page_is_free, "Determines whether a page is free.",
      "page_is_free <block> <page>"},
+    {"copy_page", command_copy_page, "Copies the source page to the destination page.",
+     "copy_page <src block> <src page> <dest block> <dest page>"},
 };
 
 // private variables
@@ -262,6 +265,35 @@ static void command_page_is_free(int argc, char *argv[])
         else {
             shell_print_line("False.");
         }
+    }
+}
+
+static void command_copy_page(int argc, char *argv[])
+{
+    if (argc != 5) {
+        shell_printf_line("copy_page requires src block, src page, dest block, and dest page "
+                          "arguments. Type \"help\" for more info.");
+        return;
+    }
+
+    // parse arguments
+    uint16_t src_block, src_page, dest_block, dest_page;
+    sscanf(argv[1], "%hu", &src_block);
+    sscanf(argv[2], "%hu", &src_page);
+    sscanf(argv[3], "%hu", &dest_block);
+    sscanf(argv[4], "%hu", &dest_page);
+
+    // attempt to copy..
+    row_address_t src_row = {.block = src_block, .page = src_page};
+    row_address_t dest_row = {.block = dest_block, .page = dest_page};
+    int ret = spi_nand_page_copy(src_row, dest_row);
+
+    // check for error..
+    if (SPI_NAND_RET_OK != ret) {
+        shell_printf_line("Error when attempting to copy page: %d.", ret);
+    }
+    else {
+        shell_printf_line("Copy page successful.");
     }
 }
 
