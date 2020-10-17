@@ -33,6 +33,9 @@ enum {
 #define SPI_NAND_PAGES_PER_BLOCK 64
 #define SPI_NAND_BLOCKS_PER_LUN  1024
 
+#define SPI_NAND_LOG2_PAGE_SIZE       11
+#define SPI_NAND_LOG2_PAGES_PER_BLOCK 6
+
 #define SPI_NAND_MAX_PAGE_ADDRESS  (SPI_NAND_PAGES_PER_BLOCK - 1) // zero-indexed
 #define SPI_NAND_MAX_BLOCK_ADDRESS (SPI_NAND_BLOCKS_PER_LUN - 1)  // zero-indexed
 
@@ -57,7 +60,7 @@ int spi_nand_page_read(row_address_t row, column_address_t column, uint8_t *data
                        size_t read_len);
 
 /// @brief Performs a page program operation
-int spi_nand_page_program(row_address_t row, column_address_t column, uint8_t *data_in,
+int spi_nand_page_program(row_address_t row, column_address_t column, const uint8_t *data_in,
                           size_t write_len);
 
 /// @brief Copies the source page to the destination page using nand's internal cache
@@ -79,5 +82,8 @@ int spi_nand_block_mark_bad(row_address_t row);
 
 /// @brief Checks if a given page is free
 int spi_nand_page_is_free(row_address_t row, bool *is_free);
+
+/// @brief Erases all blocks from the device, ignoring those marked as bad
+int spi_nand_clear(void);
 
 #endif // __SPI_NAND_H

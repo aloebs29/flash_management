@@ -130,7 +130,7 @@ static int write_enable(uint32_t timeout);
 static int page_read(row_address_t row, uint32_t timeout);
 static int read_from_cache(column_address_t column, uint8_t *data_out, size_t read_len,
                            uint32_t timeout);
-static int program_load(column_address_t column, uint8_t *data_in, size_t write_len,
+static int program_load(column_address_t column, const uint8_t *data_in, size_t write_len,
                         uint32_t timeout);
 static int program_load_random_data(column_address_t column, uint8_t *data_in, size_t write_len,
                                     uint32_t timeout);
@@ -200,7 +200,7 @@ int spi_nand_page_read(row_address_t row, column_address_t column, uint8_t *data
     return read_from_cache(column, data_out, read_len, timeout);
 }
 
-int spi_nand_page_program(row_address_t row, column_address_t column, uint8_t *data_in,
+int spi_nand_page_program(row_address_t row, column_address_t column, const uint8_t *data_in,
                           size_t write_len)
 {
     // input validation
@@ -327,6 +327,28 @@ int spi_nand_page_is_free(row_address_t row, bool *is_free)
         }
     }
 
+    return SPI_NAND_RET_OK;
+}
+
+int spi_nand_clear(void)
+{
+    bool is_bad;
+    for (int i = 0; i < SPI_NAND_BLOCKS_PER_LUN; i++) {
+        // get bad block flag
+        row_address_t row = {.block = i, .page = 0};
+        int ret = spi_nand_block_is_bad(row, &is_bad);
+        // exit on error
+        if (SPI_NAND_RET_OK != ret) return ret;
+
+        // erase if good block
+        if (!is_bad) {
+            int ret = spi_nand_block_erase(row);
+            // exit on error
+            if (SPI_NAND_RET_OK != ret) return ret;
+        }
+    }
+
+    // if we made it here, nothing returned a bad status
     return SPI_NAND_RET_OK;
 }
 
@@ -511,7 +533,7 @@ static int read_from_cache(column_address_t column, uint8_t *data_out, size_t re
 }
 
 /// @note Input validation is expected to be performed by caller.
-static int program_load(column_address_t column, uint8_t *data_in, size_t write_len,
+static int program_load(column_address_t column, const uint8_t *data_in, size_t write_len,
                         uint32_t timeout)
 {
     // setup timeout tracking for second operation

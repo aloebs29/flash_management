@@ -66,7 +66,7 @@ void spi_init(void)
     LL_SPI_Enable(SPI_INSTANCE);
 }
 
-int spi_write(uint8_t *write_buff, size_t write_len, uint32_t timeout_ms)
+int spi_write(const uint8_t *write_buff, size_t write_len, uint32_t timeout_ms)
 {
     // validate input
     if (!write_buff) return SPI_RET_NULL_PTR;
@@ -124,7 +124,7 @@ int spi_read(uint8_t *read_buff, size_t read_len, uint32_t timeout_ms)
     return SPI_RET_OK;
 }
 
-int spi_write_read(uint8_t *write_buff, uint8_t *read_buff, size_t transfer_len,
+int spi_write_read(const uint8_t *write_buff, uint8_t *read_buff, size_t transfer_len,
                    uint32_t timeout_ms)
 {
     // validate input

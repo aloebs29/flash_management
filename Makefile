@@ -17,7 +17,16 @@ SRCS += \
 	src/st/ll/stm32l4xx_ll_spi.c \
 	src/st/ll/stm32l4xx_ll_utils.c \
 	src/st/system_stm32l4xx.c \
+	src/dhara/error.c \
+	src/dhara/journal.c \
+	src/dhara/map.c \
+	src/dhara/nand.c \
+	src/fatfs/diskio.c \
+	src/fatfs/ff.c \
+	src/fatfs/ffsystem.c \
+	src/fatfs/ffunicode.c \
 	src/modules/led.c \
+	src/modules/nand_ftl_diskio.c \
 	src/modules/shell.c \
 	src/modules/shell_cmd.c \
 	src/modules/spi.c \

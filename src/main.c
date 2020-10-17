@@ -16,15 +16,21 @@
 #include "modules/led.h"
 #include "modules/shell.h"
 #include "modules/spi.h"
-#include "modules/spi_nand.h"
 #include "modules/sys_time.h"
 #include "modules/uart.h"
+
+#include "fatfs/ff.h"
+#include "fatfs/ffconf.h" // max sector size
 
 // defines
 #define STARTUP_LED_DURATION_MS 200
 
 // private function prototypes
 static void clock_config(void);
+
+// private variables
+FATFS fs;                       // file system object
+uint8_t work_buffer[FF_MAX_SS]; // TODO: Make page buffer allocation module
 
 // application main function
 int main(void)
@@ -44,10 +50,19 @@ int main(void)
     sys_time_delay(STARTUP_LED_DURATION_MS);
     led_set_output(false);
 
-    // init flash management stack
-    int ret = spi_nand_init();
-    if (SPI_NAND_RET_OK != ret) {
-        shell_printf_line("spi_nand_init failed, status: %d.", ret);
+    // mount file system
+    FRESULT res = f_mount(&fs, "", 1);
+    if (FR_NO_FILESYSTEM == res) {
+        // theres no filesystem -- make it
+        res = f_mkfs("", 0, work_buffer, sizeof(work_buffer));
+        if (FR_OK == res) {
+            // retry mount
+            res = f_mount(&fs, "", 1);
+        }
+    }
+    // check result of mount (no elif here to catch result of make/mount as well)
+    if (FR_OK != res) {
+        shell_printf_line("f_mount failed, result: %d.", res);
     }
 
     // main loop

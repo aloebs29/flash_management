@@ -158,9 +158,11 @@ static void echo(char c)
     }
     // handle backspace
     else if ('\b' == c) {
-        putchar('\b');
-        putchar(' ');
-        putchar('\b');
+        if (receive_index != 0) { // dont backspace prompt
+            putchar('\b');
+            putchar(' ');
+            putchar('\b');
+        }
     }
     // else, just echo
     else {

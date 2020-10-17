@@ -36,6 +36,7 @@ static void command_get_bad_block_table(int argc, char *argv[]);
 static void command_mark_bad_block(int argc, char *argv[]);
 static void command_page_is_free(int argc, char *argv[]);
 static void command_copy_page(int argc, char *argv[]);
+static void command_clear_nand(int argc, char *argv[]);
 
 static const shell_command_t *find_command(const char *name);
 static void print_bytes(uint8_t *data, size_t len);
@@ -58,6 +59,8 @@ static const shell_command_t shell_commands[] = {
      "page_is_free <block> <page>"},
     {"copy_page", command_copy_page, "Copies the source page to the destination page.",
      "copy_page <src block> <src page> <dest block> <dest page>"},
+    {"clear_nand", command_clear_nand, "Erases all good blocks from the SPI NAND memory unit.",
+     "clear_nand"},
 };
 
 // private variables
@@ -294,6 +297,18 @@ static void command_copy_page(int argc, char *argv[])
     }
     else {
         shell_printf_line("Copy page successful.");
+    }
+}
+
+static void command_clear_nand(int argc, char *argv[])
+{
+    int ret = spi_nand_clear();
+    // check for error..
+    if (SPI_NAND_RET_OK != ret) {
+        shell_printf_line("Error when attempting to clear nand: %d.", ret);
+    }
+    else {
+        shell_printf_line("Clear nand successful.");
     }
 }
 
