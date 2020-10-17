@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "../fatfs/ff.h"
 #include "shell.h"
 #include "spi_nand.h"
 
@@ -37,6 +38,8 @@ static void command_mark_bad_block(int argc, char *argv[]);
 static void command_page_is_free(int argc, char *argv[]);
 static void command_copy_page(int argc, char *argv[]);
 static void command_clear_nand(int argc, char *argv[]);
+static void command_write_file(int argc, char *argv[]);
+static void command_read_file(int argc, char *argv[]);
 
 static const shell_command_t *find_command(const char *name);
 static void print_bytes(uint8_t *data, size_t len);
@@ -61,6 +64,10 @@ static const shell_command_t shell_commands[] = {
      "copy_page <src block> <src page> <dest block> <dest page>"},
     {"clear_nand", command_clear_nand, "Erases all good blocks from the SPI NAND memory unit.",
      "clear_nand"},
+    {"write_file", command_write_file,
+     "Writes a file with the supplied word repeated *count* times.",
+     "write_file <filename> <word> <count>"},
+    {"read_file", command_read_file, "Reads a file out to the prompt.", "read_file <filename>"},
 };
 
 // private variables
@@ -95,7 +102,7 @@ void shell_cmd_process(char *buff, size_t len)
         }
         else {
             shell_printf_line("Unknown command '%s'.", argv[0]);
-            shell_print_line("Type 'help' for a list of commands and descriptions.");
+            shell_prints_line("Type 'help' for a list of commands and descriptions.");
         }
     }
 }
@@ -263,10 +270,10 @@ static void command_page_is_free(int argc, char *argv[])
     }
     else {
         if (is_free) {
-            shell_print_line("True.");
+            shell_prints_line("True.");
         }
         else {
-            shell_print_line("False.");
+            shell_prints_line("False.");
         }
     }
 }
@@ -310,6 +317,105 @@ static void command_clear_nand(int argc, char *argv[])
     else {
         shell_printf_line("Clear nand successful.");
     }
+}
+
+static void command_write_file(int argc, char *argv[])
+{
+    if (argc != 4) {
+        shell_printf_line("write_file requires filename, word, and count arguments. Type \"help\" "
+                          "for more info.");
+        return;
+    }
+
+    // parse arguments
+    char *filename = argv[1];
+    char *word = argv[2];
+    unsigned int count;
+    sscanf(argv[3], "%u", &count);
+
+    // attempt to open file
+    FIL file; // file object
+    FRESULT res = f_open(&file, filename, FA_CREATE_NEW | FA_WRITE);
+    if (FR_OK != res) {
+        shell_printf_line("f_open failed with res: %d.", res);
+        return;
+    }
+
+    // attempt to write to file
+    size_t word_len = strlen(word);
+    unsigned int bytes_written;
+    for (int i = 0; i < count; i++) {
+        res = f_write(&file, word, word_len, &bytes_written);
+        if (FR_OK != res || word_len != bytes_written) {
+            shell_printf_line("f_write of len: %d failed with res: %d, bytes_written: %d.",
+                              word_len, res, bytes_written);
+            f_close(&file); // close and ignore result
+            return;
+        }
+        // put newline..
+        res = f_write(&file, "\r\n", 2, &bytes_written);
+        if (FR_OK != res || 2 != bytes_written) {
+            shell_printf_line("f_write of len: %d failed with res: %d, bytes_written: %d.", 2, res,
+                              bytes_written);
+            f_close(&file); // close and ignore result
+            return;
+        }
+    }
+
+    // attempt to close the file
+    res = f_close(&file);
+    if (FR_OK != res) {
+        shell_printf_line("f_close failed with res: %d.", res);
+        return;
+    }
+
+    // if we made it here, it was successful
+    shell_printf_line("write_file to \"%s\" succeeded!", filename);
+}
+
+static void command_read_file(int argc, char *argv[])
+{
+    if (argc != 2) {
+        shell_printf_line("read_file requires filename argument. Type \"help\" for more info.");
+        return;
+    }
+
+    // parse arguments
+    char *filename = argv[1];
+
+    // attempt to open file
+    FIL file; // file object
+    FRESULT res = f_open(&file, filename, FA_OPEN_EXISTING | FA_READ);
+    if (FR_OK != res) {
+        shell_printf_line("f_open failed with res: %d.", res);
+        return;
+    }
+
+    // attempt to read from the file
+    char read_buffer[16];
+    unsigned int bytes_read = 0;
+    do {
+        res = f_read(&file, read_buffer, sizeof(read_buffer), &bytes_read);
+        if (FR_OK != res) {
+            shell_put_newline(); // put extra newline to separate from read data
+            shell_printf_line("f_read failed with res: %d.", res);
+        }
+        else {
+            shell_print(read_buffer, bytes_read);
+        }
+    } while (sizeof(read_buffer) == bytes_read);
+
+    // attempt to close the file
+    res = f_close(&file);
+    if (FR_OK != res) {
+        shell_put_newline(); // put extra newline to separate from read data
+        shell_printf_line("f_close failed with res: %d.", res);
+        return;
+    }
+
+    // if we made it here, it was successful
+    shell_put_newline(); // put extra newline to separate from read data
+    shell_printf_line("read_file from \"%s\" succeeded!", filename);
 }
 
 static const shell_command_t *find_command(const char *name)

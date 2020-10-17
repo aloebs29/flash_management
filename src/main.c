@@ -64,6 +64,9 @@ int main(void)
     if (FR_OK != res) {
         shell_printf_line("f_mount failed, result: %d.", res);
     }
+    else {
+        shell_prints_line("f_mount succeeded!");
+    }
 
     // main loop
     for (;;) {

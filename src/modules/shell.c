@@ -37,7 +37,7 @@ void shell_init(void)
     // start with welcome message and prompt
     shell_put_newline();
     shell_put_newline();
-    shell_print_line("==== shell started! ====");
+    shell_prints_line("==== shell started! ====");
     shell_put_newline();
     put_prompt();
 }
@@ -67,7 +67,22 @@ void shell_tick(void)
     }
 }
 
-void shell_print_line(const char *string)
+void shell_print(const char *buff, size_t len)
+{
+    for (int i = 0; i < len; i++) {
+        putchar(buff[i]);
+    }
+}
+
+void shell_prints(const char *string)
+{
+    while (*string) {
+        putchar(*string);
+        string++;
+    }
+}
+
+void shell_prints_line(const char *string)
 {
     // this gives us control over the newline behavior (over puts())
     while (*string) {
