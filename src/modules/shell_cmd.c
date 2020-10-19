@@ -41,6 +41,8 @@ static void command_copy_page(int argc, char *argv[]);
 static void command_clear_nand(int argc, char *argv[]);
 static void command_write_file(int argc, char *argv[]);
 static void command_read_file(int argc, char *argv[]);
+static void command_list_dir(int argc, char *argv[]);
+static void command_file_size(int argc, char *argv[]);
 
 static const shell_command_t *find_command(const char *name);
 static void print_bytes(uint8_t *data, size_t len);
@@ -69,6 +71,9 @@ static const shell_command_t shell_commands[] = {
      "Writes a file with the supplied word repeated *count* times.",
      "write_file <filename> <word> <count>"},
     {"read_file", command_read_file, "Reads a file out to the prompt.", "read_file <filename>"},
+    {"list_dir", command_list_dir, "Lists files and subdirectories within a given directory.",
+     "list_dir <path>"},
+    {"file_size", command_file_size, "Prints the size of the given file.", "file_size <filename>"},
 };
 
 // public function definitions
@@ -445,6 +450,70 @@ static void command_read_file(int argc, char *argv[])
     // if we made it here, it was successful
     shell_put_newline(); // put extra newline to separate from read data
     shell_printf_line("read_file from \"%s\" succeeded!", filename);
+}
+
+static void command_list_dir(int argc, char *argv[])
+{
+    if (argc != 2) {
+        shell_printf_line("list_dir requires path argument. Type \"help\" for more info.");
+        return;
+    }
+
+    // parse arguments
+    char *path = argv[1];
+
+    // open the directory
+    DIR directory;
+    FRESULT res = f_opendir(&directory, path);
+    if (FR_OK != res) { // failure
+        shell_printf_line("f_opendir failed with res: %d.", res);
+    }
+    else {         // success
+        for (;;) { // iterate over files in directory
+            FILINFO file_info;
+            res = f_readdir(&directory, &file_info);
+            if (FR_OK != res) { // failure
+                shell_printf_line("f_readdir failed with res: %d.", res);
+                break;
+            }
+            else if (0 == file_info.fname[0]) { // end of directory
+                // exit
+                break;
+            }
+            else { // file found
+                // print out the file name
+                shell_prints_line(file_info.fname);
+            }
+        }
+        res = f_closedir(&directory);
+        if (FR_OK != res) {
+            shell_printf_line("f_closedir failed with res: %d.", res);
+        }
+    }
+
+    shell_put_newline(); // put extra newline for prettiness
+}
+
+static void command_file_size(int argc, char *argv[])
+{
+    if (argc != 2) {
+        shell_printf_line("file_size requires filename argument. Type \"help\" for more info.");
+        return;
+    }
+
+    // parse arguments
+    char *filename = argv[1];
+
+    // attempt to open file
+    FIL file; // file object
+    FRESULT res = f_open(&file, filename, FA_OPEN_EXISTING | FA_READ);
+    if (FR_OK != res) { // failure
+        shell_printf_line("f_open failed with res: %d.", res);
+    }
+    else { // success
+        // print size
+        shell_printf_line("File size: %d", f_size(&file));
+    }
 }
 
 static const shell_command_t *find_command(const char *name)
