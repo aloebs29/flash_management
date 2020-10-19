@@ -14,6 +14,7 @@
 #include "../st/ll/stm32l4xx_ll_bus.h"
 #include "../st/ll/stm32l4xx_ll_gpio.h"
 
+#include "mem.h"
 #include "spi.h"
 #include "sys_time.h"
 
@@ -144,10 +145,6 @@ static int poll_for_oip_clear(feature_reg_status_t *status_out, uint32_t timeout
 static bool validate_row_address(row_address_t row);
 static bool validate_column_address(column_address_t address);
 static int get_ret_from_ecc_status(feature_reg_status_t status);
-
-// private variables
-// this buffer is needed for is_free, we don't want to allocate this on the stack
-uint8_t page_main_and_oob_buffer[SPI_NAND_PAGE_SIZE + SPI_NAND_OOB_SIZE];
 
 // public function definitions
 int spi_nand_init(void)
@@ -311,23 +308,30 @@ int spi_nand_block_mark_bad(row_address_t row)
 
 int spi_nand_page_is_free(row_address_t row, bool *is_free)
 {
+    // attempt to allocate a page buffer to read data into..
+    size_t buffer_len = SPI_NAND_PAGE_SIZE + SPI_NAND_OOB_SIZE;
+    uint8_t *page_buffer = mem_alloc(buffer_len);
+    if (!page_buffer) { // exit if malloc was unsuccessful
+        return SPI_NAND_RET_NOMEM;
+    }
     // page read will validate block & page address
-    int ret =
-        spi_nand_page_read(row, 0, page_main_and_oob_buffer, sizeof(page_main_and_oob_buffer));
-    // exit on error
-    if (SPI_NAND_RET_OK != ret) return ret;
-
-    *is_free = true; // innocent until proven guilty
-    // iterate through page & oob to make sure its 0xff's all the way down
-    uint32_t comp_word = 0xffffffff;
-    for (int i = 0; i < sizeof(page_main_and_oob_buffer); i += sizeof(comp_word)) {
-        if (0 != memcmp(&comp_word, &page_main_and_oob_buffer[i], sizeof(comp_word))) {
-            *is_free = false;
-            break;
+    int ret = spi_nand_page_read(row, 0, page_buffer, buffer_len);
+    if (SPI_NAND_RET_OK == ret) {
+        *is_free = true; // innocent until proven guilty
+        // iterate through page & oob to make sure its 0xff's all the way down
+        uint32_t comp_word = 0xffffffff;
+        for (int i = 0; i < buffer_len; i += sizeof(comp_word)) {
+            if (0 != memcmp(&comp_word, &page_buffer[i], sizeof(comp_word))) {
+                *is_free = false;
+                break;
+            }
         }
     }
 
-    return SPI_NAND_RET_OK;
+    // free the page buffer
+    mem_free(page_buffer);
+
+    return ret;
 }
 
 int spi_nand_clear(void)

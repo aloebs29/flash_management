@@ -26,6 +26,7 @@ enum {
     SPI_NAND_RET_ECC_ERR = -7,
     SPI_NAND_RET_P_FAIL = -8,
     SPI_NAND_RET_E_FAIL = -9,
+    SPI_NAND_RET_NOMEM = -10,
 };
 
 #define SPI_NAND_PAGE_SIZE       2048

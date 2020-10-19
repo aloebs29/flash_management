@@ -14,6 +14,7 @@
 #include "st/stm32_assert.h"
 
 #include "modules/led.h"
+#include "modules/mem.h"
 #include "modules/shell.h"
 #include "modules/spi.h"
 #include "modules/sys_time.h"
@@ -29,8 +30,7 @@
 static void clock_config(void);
 
 // private variables
-FATFS fs;                       // file system object
-uint8_t work_buffer[FF_MAX_SS]; // TODO: Make page buffer allocation module
+FATFS fs; // file system object
 
 // application main function
 int main(void)
@@ -52,20 +52,44 @@ int main(void)
 
     // mount file system
     FRESULT res = f_mount(&fs, "", 1);
-    if (FR_NO_FILESYSTEM == res) {
-        // theres no filesystem -- make it
-        res = f_mkfs("", 0, work_buffer, sizeof(work_buffer));
-        if (FR_OK == res) {
-            // retry mount
-            res = f_mount(&fs, "", 1);
-        }
-    }
-    // check result of mount (no elif here to catch result of make/mount as well)
-    if (FR_OK != res) {
-        shell_printf_line("f_mount failed, result: %d.", res);
+    // check result
+    if (FR_OK == res) {
+        shell_prints_line("f_mount succeeded!");
     }
     else {
-        shell_prints_line("f_mount succeeded!");
+        shell_printf_line("f_mount failed, result: %d.", res);
+    }
+
+    // if filesystem mount failed due to no filesystem, attempt to make it
+    if (FR_NO_FILESYSTEM == res) {
+        shell_prints_line("No filesystem present. Attempting to make file system..");
+        // allocate a work buffer
+        uint8_t *work_buffer = mem_alloc(FF_MAX_SS);
+        if (!work_buffer) {
+            shell_prints_line("Unable to allocate f_mkfs work buffer. File system not created.");
+        }
+        else {
+            // make the file system
+            res = f_mkfs("", 0, work_buffer, FF_MAX_SS);
+            if (FR_OK != res) {
+                shell_printf_line("f_mkfs failed, result: %d.", res); // fs make failure
+            }
+            else {
+                shell_prints_line("f_mkfs succeeded!"); // fs make success
+                // retry mount
+                res = f_mount(&fs, "", 1);
+                // check result
+                if (FR_OK == res) {
+                    shell_prints_line("f_mount succeeded!");
+                }
+                else {
+                    shell_printf_line("f_mount failed, result: %d.", res);
+                }
+            }
+
+            // free the buffer
+            mem_free(work_buffer);
+        }
     }
 
     // main loop

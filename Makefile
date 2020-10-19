@@ -27,6 +27,7 @@ SRCS += \
 	src/fatfs/ffunicode.c \
 	src/modules/led.c \
 	src/modules/nand_ftl_diskio.c \
+	src/modules/mem.c \
 	src/modules/shell.c \
 	src/modules/shell_cmd.c \
 	src/modules/spi.c \

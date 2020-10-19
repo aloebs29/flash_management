@@ -11,6 +11,7 @@
 #include <string.h>
 
 #include "../fatfs/ff.h"
+#include "mem.h"
 #include "shell.h"
 #include "spi_nand.h"
 
@@ -70,9 +71,6 @@ static const shell_command_t shell_commands[] = {
     {"read_file", command_read_file, "Reads a file out to the prompt.", "read_file <filename>"},
 };
 
-// private variables
-static uint8_t page_buffer[SPI_NAND_PAGE_SIZE];
-
 // public function definitions
 void shell_cmd_process(char *buff, size_t len)
 {
@@ -130,6 +128,12 @@ static void command_read_page(int argc, char *argv[])
     sscanf(argv[2], "%hu", &page);
     sscanf(argv[3], "%hu", &column);
 
+    // attempt to allocate a page buffer
+    uint8_t *page_buffer = mem_alloc(SPI_NAND_PAGE_SIZE);
+    if (!page_buffer) {
+        shell_printf_line("Unable to allocate nand page buffer.");
+        return;
+    }
     // attempt to read..
     row_address_t row = {.block = block, .page = page};
     int ret = spi_nand_page_read(row, column, page_buffer, sizeof(page_buffer));
@@ -141,6 +145,9 @@ static void command_read_page(int argc, char *argv[])
     else {
         print_bytes(page_buffer, sizeof(page_buffer) - column);
     }
+
+    // free the page buffer
+    mem_free(page_buffer);
 }
 
 static void command_write_page(int argc, char *argv[])
@@ -159,6 +166,12 @@ static void command_write_page(int argc, char *argv[])
     sscanf(argv[3], "%hu", &column);
     sscanf(argv[4], "%hu", &value);
 
+    // attempt to allocate a page buffer
+    uint8_t *page_buffer = mem_alloc(SPI_NAND_PAGE_SIZE);
+    if (!page_buffer) {
+        shell_printf_line("Unable to allocate nand page buffer.");
+        return;
+    }
     // create write data
     size_t write_len = sizeof(page_buffer) - column;
     memset(page_buffer, value, write_len);
@@ -173,6 +186,9 @@ static void command_write_page(int argc, char *argv[])
     else {
         shell_printf_line("Write page successful.");
     }
+
+    // free the page buffer
+    mem_free(page_buffer);
 }
 
 static void command_erase_block(int argc, char *argv[])
@@ -202,7 +218,14 @@ static void command_erase_block(int argc, char *argv[])
 
 static void command_get_bad_block_table(int argc, char *argv[])
 {
+    // attempt to allocate a page buffer
+    uint8_t *page_buffer = mem_alloc(SPI_NAND_PAGE_SIZE);
+    if (!page_buffer) {
+        shell_printf_line("Unable to allocate nand page buffer.");
+        return;
+    }
     // read block status into page buffer
+    bool success = true;
     for (int i = 0; i < SPI_NAND_BLOCKS_PER_LUN; i++) {
         bool is_bad;
         row_address_t row = {.block = i, .page = 0};
@@ -210,7 +233,8 @@ static void command_get_bad_block_table(int argc, char *argv[])
         if (SPI_NAND_RET_OK != ret) {
             // error occured
             shell_printf_line("Error when checking block %d status: %d.", i, ret);
-            return; // exit
+            success = false;
+            break; // exit
         }
         else {
             page_buffer[i] = is_bad;
@@ -218,7 +242,12 @@ static void command_get_bad_block_table(int argc, char *argv[])
     }
 
     // print bad block table
-    print_bytes(page_buffer, SPI_NAND_BLOCKS_PER_LUN);
+    if (success) {
+        print_bytes(page_buffer, SPI_NAND_BLOCKS_PER_LUN);
+    }
+
+    // free the page buffer
+    mem_free(page_buffer);
 }
 
 static void command_mark_bad_block(int argc, char *argv[])
