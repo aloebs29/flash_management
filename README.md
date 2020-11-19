@@ -52,6 +52,31 @@ src
 - **stm32l432kc_it.c** - All overrides for exception handlers. All faults just turn on the LED (if able).
 - **syscalls.c** - Lib c sys calls.
 
+## usage
+All interaction is handled through the shell (currently) which uses a UART backend. If you're using a nucleo board you can simply plug in to USB and use the virtual com port.
+### shell commands
+#### utility
+- help
+#### raw flash interaction
+- read_page
+- write_page
+- erase_block
+- get_bbt
+- mark_bb
+- page_is_free
+- copy_page
+- erase_all
+#### file system interaction
+- write_file
+- read_file
+- list_dir
+- file_size
+
+## future improvements
+- More shell commands for interacting with the FAT filesystem, especially format. This is needed to recover from FS errors that may occur when using raw flash commands from the shell.
+- Add USB MSC. I'd really like to avoid using ST's HAL, so the easiest pathway here is probably porting [TinyUSB](https://github.com/hathach/tinyusb) to the STM32L4 (F4 is already supported).
+- Example datalogging application.
+
 ## acknowledgements
 - https://github.com/dlbeer/dhara - Dhara NAND flash translation layer.
 - http://elm-chan.org/fsw/ff/00index_e.html - ChaN FAT file system library.
