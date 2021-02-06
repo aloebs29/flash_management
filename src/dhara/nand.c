@@ -81,7 +81,7 @@ int dhara_nand_is_free(const struct dhara_nand *n, dhara_page_t p)
     int ret = spi_nand_page_is_free(row, &is_free);
     if (SPI_NAND_RET_OK != ret) {
         // if we get a bad return, we'll report the page as "not free"
-        is_free = true;
+        is_free = false;
     }
 
     return (int)is_free;
