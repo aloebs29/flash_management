@@ -142,8 +142,6 @@ static void command_read_page(int argc, char *argv[])
     // attempt to read..
     row_address_t row = {.block = block, .page = page};
     int ret = spi_nand_page_read(row, column, page_buffer, sizeof(page_buffer));
-
-    // check for error..
     if (SPI_NAND_RET_OK != ret) {
         shell_printf_line("Error when attempting to read page: %d.", ret);
     }
@@ -151,7 +149,6 @@ static void command_read_page(int argc, char *argv[])
         print_bytes(page_buffer, sizeof(page_buffer) - column);
     }
 
-    // free the page buffer
     mem_free(page_buffer);
 }
 
@@ -183,16 +180,12 @@ static void command_write_page(int argc, char *argv[])
     // attempt to write..
     row_address_t row = {.block = block, .page = page};
     int ret = spi_nand_page_program(row, column, page_buffer, write_len);
-
-    // check for error..
     if (SPI_NAND_RET_OK != ret) {
         shell_printf_line("Error when attempting to write page: %d.", ret);
     }
     else {
         shell_printf_line("Write page successful.");
     }
-
-    // free the page buffer
     mem_free(page_buffer);
 }
 
@@ -211,8 +204,6 @@ static void command_erase_block(int argc, char *argv[])
     // attempt to erase..
     row_address_t row = {.block = block, .page = 0};
     int ret = spi_nand_block_erase(row);
-
-    // check for error..
     if (SPI_NAND_RET_OK != ret) {
         shell_printf_line("Error when attempting to erase block: %d.", ret);
     }
@@ -236,10 +227,9 @@ static void command_get_bad_block_table(int argc, char *argv[])
         row_address_t row = {.block = i, .page = 0};
         int ret = spi_nand_block_is_bad(row, &is_bad);
         if (SPI_NAND_RET_OK != ret) {
-            // error occured
             shell_printf_line("Error when checking block %d status: %d.", i, ret);
             success = false;
-            break; // exit
+            break;
         }
         else {
             page_buffer[i] = is_bad;
@@ -250,8 +240,6 @@ static void command_get_bad_block_table(int argc, char *argv[])
     if (success) {
         print_bytes(page_buffer, SPI_NAND_BLOCKS_PER_LUN);
     }
-
-    // free the page buffer
     mem_free(page_buffer);
 }
 
@@ -270,8 +258,6 @@ static void command_mark_bad_block(int argc, char *argv[])
     // attempt to mark bad block..
     row_address_t row = {.block = block, .page = 0};
     int ret = spi_nand_block_mark_bad(row);
-
-    // check for error..
     if (SPI_NAND_RET_OK != ret) {
         shell_printf_line("Error when attempting to mark bad block: %d.", ret);
     }
@@ -297,8 +283,6 @@ static void command_page_is_free(int argc, char *argv[])
     bool is_free;
     row_address_t row = {.block = block, .page = page};
     int ret = spi_nand_page_is_free(row, &is_free);
-
-    // check for error..
     if (SPI_NAND_RET_OK != ret) {
         shell_printf_line("Error when attempting to check if page is free: %d.", ret);
     }
@@ -331,8 +315,6 @@ static void command_copy_page(int argc, char *argv[])
     row_address_t src_row = {.block = src_block, .page = src_page};
     row_address_t dest_row = {.block = dest_block, .page = dest_page};
     int ret = spi_nand_page_copy(src_row, dest_row);
-
-    // check for error..
     if (SPI_NAND_RET_OK != ret) {
         shell_printf_line("Error when attempting to copy page: %d.", ret);
     }
@@ -344,7 +326,6 @@ static void command_copy_page(int argc, char *argv[])
 static void command_clear_nand(int argc, char *argv[])
 {
     int ret = spi_nand_clear();
-    // check for error..
     if (SPI_NAND_RET_OK != ret) {
         shell_printf_line("Error when attempting to clear nand: %d.", ret);
     }
@@ -368,7 +349,7 @@ static void command_write_file(int argc, char *argv[])
     sscanf(argv[3], "%u", &count);
 
     // attempt to open file
-    FIL file; // file object
+    FIL file;
     FRESULT res = f_open(&file, filename, FA_CREATE_NEW | FA_WRITE);
     if (FR_OK != res) {
         shell_printf_line("f_open failed with res: %d.", res);
@@ -418,7 +399,7 @@ static void command_read_file(int argc, char *argv[])
     char *filename = argv[1];
 
     // attempt to open file
-    FIL file; // file object
+    FIL file;
     FRESULT res = f_open(&file, filename, FA_OPEN_EXISTING | FA_READ);
     if (FR_OK != res) {
         shell_printf_line("f_open failed with res: %d.", res);
@@ -465,23 +446,22 @@ static void command_list_dir(int argc, char *argv[])
     // open the directory
     DIR directory;
     FRESULT res = f_opendir(&directory, path);
-    if (FR_OK != res) { // failure
+    if (FR_OK != res) {
         shell_printf_line("f_opendir failed with res: %d.", res);
     }
-    else {         // success
-        for (;;) { // iterate over files in directory
+    else {
+        for (;;) {
             FILINFO file_info;
             res = f_readdir(&directory, &file_info);
-            if (FR_OK != res) { // failure
+            if (FR_OK != res) {
                 shell_printf_line("f_readdir failed with res: %d.", res);
                 break;
             }
-            else if (0 == file_info.fname[0]) { // end of directory
-                // exit
+            else if (0 == file_info.fname[0]) {
+                // end of directory
                 break;
             }
-            else { // file found
-                // print out the file name
+            else {
                 shell_prints_line(file_info.fname);
             }
         }
@@ -505,13 +485,12 @@ static void command_file_size(int argc, char *argv[])
     char *filename = argv[1];
 
     // attempt to open file
-    FIL file; // file object
+    FIL file;
     FRESULT res = f_open(&file, filename, FA_OPEN_EXISTING | FA_READ);
-    if (FR_OK != res) { // failure
+    if (FR_OK != res) {
         shell_printf_line("f_open failed with res: %d.", res);
     }
-    else { // success
-        // print size
+    else {
         shell_printf_line("File size: %d", f_size(&file));
     }
 }

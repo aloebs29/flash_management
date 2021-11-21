@@ -8,7 +8,6 @@
 
 #include "modules/uart.h"
 
-// sys calls
 void *_sbrk(int incr)
 {
     extern int end;
@@ -53,9 +52,8 @@ int _read(int file, char *ptr, int len)
     if (STDIN_FILENO == file) {
         int i; // this needs to persist after the for loop
         for (i = 0; i < len; i++) {
-            // this will return true if a character is available
             if (!_uart_try_getc(&ptr[i])) {
-                break; // this will end up returning partial buffer
+                break;
             }
         }
         return i;
@@ -70,7 +68,6 @@ int _read(int file, char *ptr, int len)
 int _write(int file, char *ptr, int len)
 {
     if ((STDOUT_FILENO == file) || (STDERR_FILENO == file)) {
-        // print all of the characters
         for (int i = 0; i < len; i++) {
             _uart_putc(ptr[i]);
         }

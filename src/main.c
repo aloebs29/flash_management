@@ -21,7 +21,7 @@
 #include "modules/uart.h"
 
 #include "fatfs/ff.h"
-#include "fatfs/ffconf.h" // max sector size
+#include "fatfs/ffconf.h"
 
 // defines
 #define STARTUP_LED_DURATION_MS 200
@@ -52,7 +52,6 @@ int main(void)
 
     // mount file system
     FRESULT res = f_mount(&fs, "", 1);
-    // check result
     if (FR_OK == res) {
         shell_prints_line("f_mount succeeded!");
     }
@@ -63,7 +62,6 @@ int main(void)
     // if filesystem mount failed due to no filesystem, attempt to make it
     if (FR_NO_FILESYSTEM == res) {
         shell_prints_line("No filesystem present. Attempting to make file system..");
-        // allocate a work buffer
         uint8_t *work_buffer = mem_alloc(FF_MAX_SS);
         if (!work_buffer) {
             shell_prints_line("Unable to allocate f_mkfs work buffer. File system not created.");
@@ -78,7 +76,6 @@ int main(void)
                 shell_prints_line("f_mkfs succeeded!"); // fs make success
                 // retry mount
                 res = f_mount(&fs, "", 1);
-                // check result
                 if (FR_OK == res) {
                     shell_prints_line("f_mount succeeded!");
                 }
@@ -87,14 +84,11 @@ int main(void)
                 }
             }
 
-            // free the buffer
             mem_free(work_buffer);
         }
     }
 
-    // main loop
     for (;;) {
-        // tick functions
         shell_tick();
     }
 }

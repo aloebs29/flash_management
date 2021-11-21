@@ -18,7 +18,6 @@ void led_init(void)
 
     // setup pin as output -- default to low (LED off)
     led_set_output(false);
-
     LL_GPIO_SetPinMode(LD3_PORT, LD3_PIN, LL_GPIO_MODE_OUTPUT);
     LL_GPIO_SetPinOutputType(LD3_PORT, LD3_PIN, LL_GPIO_OUTPUT_PUSHPULL);
     LL_GPIO_SetPinSpeed(LD3_PORT, LD3_PIN, LL_GPIO_SPEED_FREQ_LOW);

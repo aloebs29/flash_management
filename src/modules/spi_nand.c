@@ -159,20 +159,20 @@ int spi_nand_init(void)
     // reset
     sys_time_delay(RESET_DELAY);
     int ret = reset();
-    if (SPI_NAND_RET_OK != ret) return ret; // exit upon error
+    if (SPI_NAND_RET_OK != ret) return ret;
     sys_time_delay(RESET_DELAY);
 
     // read id
     ret = read_id();
-    if (SPI_NAND_RET_OK != ret) return ret; // exit upon error
+    if (SPI_NAND_RET_OK != ret) return ret;
 
     // unlock all blocks
     ret = unlock_all_blocks();
-    if (SPI_NAND_RET_OK != ret) return ret; // exit upon error
+    if (SPI_NAND_RET_OK != ret) return ret;
 
     // enable ecc
     ret = enable_ecc();
-    if (SPI_NAND_RET_OK != ret) return ret; // exit upon error
+    if (SPI_NAND_RET_OK != ret) return ret;
 
     return ret;
 }
@@ -192,7 +192,6 @@ int spi_nand_page_read(row_address_t row, column_address_t column, uint8_t *data
 
     // read page into flash's internal cache
     int ret = page_read(row, OP_TIMEOUT);
-    // exit on bad status
     if (SPI_NAND_RET_OK != ret) return ret;
 
     // read from cache
@@ -215,13 +214,11 @@ int spi_nand_page_program(row_address_t row, column_address_t column, const uint
 
     // write enable
     int ret = write_enable(OP_TIMEOUT);
-    // exit if bad status
     if (SPI_NAND_RET_OK != ret) return ret;
 
     // load data into nand's internal cache
     uint32_t timeout = OP_TIMEOUT - sys_time_get_elapsed(start);
     ret = program_load(column, data_in, write_len, timeout);
-    // exit on bad status
     if (SPI_NAND_RET_OK != ret) return ret;
 
     // write to cell array from nand's internal cache
@@ -241,20 +238,17 @@ int spi_nand_page_copy(row_address_t src, row_address_t dest)
 
     // read page into flash's internal cache
     int ret = page_read(src, OP_TIMEOUT);
-    // exit on bad status
     if (SPI_NAND_RET_OK != ret) return ret;
 
     // write enable
     uint32_t timeout = OP_TIMEOUT - sys_time_get_elapsed(start);
     ret = write_enable(timeout);
-    // exit if bad status
     if (SPI_NAND_RET_OK != ret) return ret;
 
     // empty program load random data
     timeout = OP_TIMEOUT - sys_time_get_elapsed(start);
     uint8_t dummy_byte = 0; // avoid a null pointer
     ret = program_load_random_data(0, &dummy_byte, 0, timeout);
-    // exit on bad status
     if (SPI_NAND_RET_OK != ret) return ret;
 
     // write to cell array from nand's internal cache
@@ -275,7 +269,6 @@ int spi_nand_block_erase(row_address_t row)
 
     // write enable
     int ret = write_enable(OP_TIMEOUT); // ignore the time elapsed since start since its negligible
-    // exit if bad status
     if (SPI_NAND_RET_OK != ret) return ret;
 
     // block erase
@@ -288,7 +281,6 @@ int spi_nand_block_is_bad(row_address_t row, bool *is_bad)
     uint8_t bad_block_mark[2];
     // page read will validate the block address
     int ret = spi_nand_page_read(row, SPI_NAND_PAGE_SIZE, bad_block_mark, sizeof(bad_block_mark));
-    // exit if bad status
     if (SPI_NAND_RET_OK != ret) return ret;
 
     // check marker
@@ -314,7 +306,6 @@ int spi_nand_page_is_free(row_address_t row, bool *is_free)
     // page read will validate block & page address
     int ret =
         spi_nand_page_read(row, 0, page_main_and_oob_buffer, sizeof(page_main_and_oob_buffer));
-    // exit on error
     if (SPI_NAND_RET_OK != ret) return ret;
 
     *is_free = true; // innocent until proven guilty
@@ -337,13 +328,11 @@ int spi_nand_clear(void)
         // get bad block flag
         row_address_t row = {.block = i, .page = 0};
         int ret = spi_nand_block_is_bad(row, &is_bad);
-        // exit on error
         if (SPI_NAND_RET_OK != ret) return ret;
 
         // erase if good block
         if (!is_bad) {
             int ret = spi_nand_block_erase(row);
-            // exit on error
             if (SPI_NAND_RET_OK != ret) return ret;
         }
     }
@@ -384,7 +373,6 @@ static int reset(void)
     csel_select();
     int ret = spi_write(&tx_data, 1, OP_TIMEOUT);
     csel_deselect();
-    // exit if bad status
     if (SPI_RET_OK != ret) return SPI_NAND_RET_BAD_SPI;
 
     // wait until op is done or we timeout
@@ -433,7 +421,6 @@ static int set_feature(uint8_t reg, uint8_t data, uint32_t timeout)
     int ret = spi_write(tx_data, FEATURE_TRANS_LEN, timeout);
     csel_deselect();
 
-    // map spi return to spi nand return
     return (SPI_RET_OK == ret) ? SPI_NAND_RET_OK : SPI_NAND_RET_BAD_SPI;
 }
 
@@ -468,7 +455,6 @@ static int write_enable(uint32_t timeout)
     int ret = spi_write(&cmd, sizeof(cmd), timeout);
     csel_deselect();
 
-    // map spi return to spi nand return
     return (SPI_RET_OK == ret) ? SPI_NAND_RET_OK : SPI_NAND_RET_BAD_SPI;
 }
 
@@ -488,14 +474,12 @@ static int page_read(row_address_t row, uint32_t timeout)
     csel_select();
     int ret = spi_write(tx_data, PAGE_READ_TRANS_LEN, timeout);
     csel_deselect();
-    // exit if bad status
     if (SPI_RET_OK != ret) return SPI_NAND_RET_BAD_SPI;
 
     // wait until that operation finishes
     feature_reg_status_t status;
     timeout -= sys_time_get_elapsed(start);
     ret = poll_for_oip_clear(&status, timeout);
-    // exit if bad status
     if (SPI_RET_OK != ret) return ret;
 
     // check ecc
@@ -524,12 +508,7 @@ static int read_from_cache(column_address_t column, uint8_t *data_out, size_t re
     }
     csel_deselect();
 
-    if (SPI_RET_OK != ret) {
-        return SPI_NAND_RET_BAD_SPI;
-    }
-    else {
-        return SPI_NAND_RET_OK;
-    }
+    return (SPI_RET_OK == ret) ? SPI_NAND_RET_OK : SPI_NAND_RET_BAD_SPI;
 }
 
 /// @note Input validation is expected to be performed by caller.
@@ -553,12 +532,7 @@ static int program_load(column_address_t column, const uint8_t *data_in, size_t 
     }
     csel_deselect();
 
-    if (SPI_RET_OK != ret) {
-        return SPI_NAND_RET_BAD_SPI;
-    }
-    else {
-        return SPI_NAND_RET_OK;
-    }
+    return (SPI_RET_OK == ret) ? SPI_NAND_RET_OK : SPI_NAND_RET_BAD_SPI;
 }
 
 static int program_load_random_data(column_address_t column, uint8_t *data_in, size_t write_len,
@@ -581,12 +555,7 @@ static int program_load_random_data(column_address_t column, uint8_t *data_in, s
     }
     csel_deselect();
 
-    if (SPI_RET_OK != ret) {
-        return SPI_NAND_RET_BAD_SPI;
-    }
-    else {
-        return SPI_NAND_RET_OK;
-    }
+    return (SPI_RET_OK == ret) ? SPI_NAND_RET_OK : SPI_NAND_RET_BAD_SPI;
 }
 
 /// @note Input validation is expected to be performed by caller.
@@ -605,7 +574,6 @@ static int program_execute(row_address_t row, uint32_t timeout)
     csel_select();
     int ret = spi_write(tx_data, PAGE_READ_TRANS_LEN, timeout);
     csel_deselect();
-    // exit if bad status
     if (SPI_RET_OK != ret) return SPI_NAND_RET_BAD_SPI;
 
     // wait until that operation finishes
@@ -639,7 +607,6 @@ static int block_erase(row_address_t row, uint32_t timeout)
     csel_select();
     int ret = spi_write(tx_data, BLOCK_ERASE_TRANS_LEN, timeout);
     csel_deselect();
-    // exit if bad status
     if (SPI_RET_OK != ret) return SPI_NAND_RET_BAD_SPI;
 
     // wait until that operation finishes

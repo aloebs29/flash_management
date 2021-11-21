@@ -213,7 +213,6 @@ void Reset_Handler(void)
     extern unsigned __bss_start__;
     extern unsigned __bss_end__;
 
-    // CMSIS system init
     SystemInit();
 
     unsigned const *src;
@@ -229,9 +228,7 @@ void Reset_Handler(void)
         *dst = 0;
     }
 
-    // initialize stdlib
     __libc_init_array();
-    // run application
     (void)main();
 
     // we should never get here

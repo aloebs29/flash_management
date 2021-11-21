@@ -51,9 +51,9 @@ Module.symvers
 Mkfile.old
 dkms.conf
 
-# build directory
 .vscode/
 build/
 datasheets/
 examples/
-
+.clangd/
+compile_commands.json

@@ -72,15 +72,10 @@ void uart_init(void)
 
     // configure UART CR2
     LL_USART_SetStopBitsLength(VCP_UART, LL_USART_STOPBITS_1);
-    // LL_USART_DisableLIN(VCP_UART);
-    // LL_USART_DisableSCLKOutput(VCP_UART);
 
     // configure UART CR3
     LL_USART_DisableOneBitSamp(VCP_UART);
     LL_USART_SetHWFlowCtrl(VCP_UART, LL_USART_HWCONTROL_NONE);
-    // LL_USART_DisableSmartcard(VCP_UART);
-    // LL_USART_DisableHalfDuplex(VCP_UART);
-    // LL_USART_DisableIrda(VCP_UART);
 
     // config UART BRR
     LL_USART_SetBaudRate(VCP_UART, get_pclk1_hz(), LL_USART_OVERSAMPLING_16, BAUD_RATE);
