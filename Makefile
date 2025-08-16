@@ -83,8 +83,6 @@ LDFLAGS += \
 	-static \
 	-lc \
 	-lm \
-	-Wl,--start-group \
-	-Wl,--end-group \
 	-Wl,-Map=$(BUILD_DIR)/$(PROJECT).map \
 	-Wl,--gc-sections \
 	-Wl,--print-memory-usage
