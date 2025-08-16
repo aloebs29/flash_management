@@ -93,33 +93,32 @@ DRESULT nand_ftl_diskio_ioctl(BYTE cmd, void *buff)
     dhara_error_t err;
 
     switch (cmd) {
-        case CTRL_SYNC:;
-            ;
+        case CTRL_SYNC: {
             int ret = dhara_map_sync(&map, &err);
             if (ret) {
                 shell_printf_line("dhara sync failed: %d, error: %d", ret, err);
                 return RES_ERROR;
             }
             break;
-        case GET_SECTOR_COUNT:;
-            ;
+        }
+        case GET_SECTOR_COUNT: {
             dhara_sector_t sector_count = dhara_map_capacity(&map);
             shell_printf_line("dhara capacity: %d", sector_count);
             LBA_t *sector_count_out = (LBA_t *)buff;
             *sector_count_out = sector_count;
             break;
-        case GET_SECTOR_SIZE:
-            ;
+        }
+        case GET_SECTOR_SIZE: {
             WORD *sector_size_out = (WORD *)buff;
             *sector_size_out = SPI_NAND_PAGE_SIZE;
             break;
-        case GET_BLOCK_SIZE:
-            ;
+        }
+        case GET_BLOCK_SIZE: {
             DWORD *block_size_out = (DWORD *)buff;
             *block_size_out = SPI_NAND_PAGES_PER_BLOCK;
             break;
-        case CTRL_TRIM:
-            ;
+        }
+        case CTRL_TRIM: {
             LBA_t *args = (LBA_t *)buff;
             LBA_t start = args[0];
             LBA_t end = args[1];
@@ -132,6 +131,7 @@ DRESULT nand_ftl_diskio_ioctl(BYTE cmd, void *buff)
                 start++;
             }
             break;
+        }
         default:
             return RES_PARERR;
     }
