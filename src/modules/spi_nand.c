@@ -133,7 +133,7 @@ static int read_from_cache(column_address_t column, uint8_t *data_out, size_t re
 static int program_load(column_address_t column, const uint8_t *data_in, size_t write_len,
                         uint32_t timeout);
 static int program_load_random_data(column_address_t column, uint8_t *data_in, size_t write_len,
-                                    uint32_t timeout);
+                                    uint32_t timeout) __attribute__((unused));
 static int program_execute(row_address_t row, uint32_t timeout);
 static int block_erase(row_address_t row, uint32_t timeout);
 
@@ -243,12 +243,6 @@ int spi_nand_page_copy(row_address_t src, row_address_t dest)
     // write enable
     uint32_t timeout = OP_TIMEOUT - sys_time_get_elapsed(start);
     ret = write_enable(timeout);
-    if (SPI_NAND_RET_OK != ret) return ret;
-
-    // empty program load random data
-    timeout = OP_TIMEOUT - sys_time_get_elapsed(start);
-    uint8_t dummy_byte = 0; // avoid a null pointer
-    ret = program_load_random_data(0, &dummy_byte, 0, timeout);
     if (SPI_NAND_RET_OK != ret) return ret;
 
     // write to cell array from nand's internal cache
