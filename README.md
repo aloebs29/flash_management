@@ -3,6 +3,9 @@ Flash management stack consisting of a flash translation layer ([dhara](https://
 
 This project is intended to be the "minimum implementation" needed to tie a FAT filesystem, flash translation layer, and low-level flash driver together. Most areas of the source code are heavily commented (probably over commented) in an effort to make it easy as possible for people unfamiliar with ONFI & flash translation concepts to follow.
 
+> [!TIP]
+> This implementation was written for a single-plane flash part. If you're trying to adapt this repo to work on with a multi-plane flash part, you will need to change the implementation of the `spi_nand_copy` function (as the implementation here only works for copying within a plane). See [this issue](https://github.com/aloebs29/flash_management/issues/2#issuecomment-1890906616) for a discussion + fork of this repo that was made to work with a multi-planar storage device.
+
 ## project structure
 ```
 src
